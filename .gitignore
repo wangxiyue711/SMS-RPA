@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# VSCode
+.vscode/
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Logs
+*.log
+*.tmp
+
+# OneDrive
+*.lnk
+~$*
+*.tmp
+*.bak
+*.asd
+*.wbk
+
+# Others
+.DS_Store
+.idea/
+.env
+.venv
