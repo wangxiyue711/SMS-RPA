@@ -35,11 +35,13 @@ TIMEOUT = int(os.getenv("HTTP_TIMEOUT", "15"))
 
 # Gmail IMAP
 IMAP_HOST = os.getenv("IMAP_HOST", "imap.gmail.com")
-IMAP_USER = os.getenv("IMAP_USER", "wangxiyue0711@gmail.com")
-IMAP_PASS = os.getenv("IMAP_PASS", "dvmwjjztjeqnwslf")
+IMAP_USER = os.getenv("IMAP_USER", "info@rec-lab.biz")
+IMAP_PASS = os.getenv("IMAP_PASS", "gwfxmbfzvexlydwb")
 
 # 只允许 indeed 域名
-ALLOWED_DOMAINS = set(["indeed.com", "cts.indeed.com"])
+ALLOWED_DOMAINS = set([
+    "indeed.com", "cts.indeed.com", "jp.indeed.com", "indeedemail.com"
+])
 
 SITE_USER = os.getenv("SITE_USER", "info@rec-lab.biz")
 SITE_PASS = os.getenv("SITE_PASS", "reclab0601")
@@ -165,13 +167,23 @@ def extract_urls_from_email(msg: Message) -> List[str]:
     # 优先用BeautifulSoup解析HTML
     if html:
         soup = BeautifulSoup(str(html), "html.parser")
-        # 找到带“応募内容を確認する”文本的a标签
+        # 1. 优先找有下划线的求职者名a标签（通常有style或class包含underline/下划线）
+        underline_links = []
+        for a in soup.find_all("a", href=True):
+            # 检查style或class是否有下划线
+            style = a.get("style", "")
+            class_ = " ".join(a.get("class", []))
+            if "underline" in style or "underline" in class_ or "text-decoration:underline" in style.replace(" ","").lower():
+                underline_links.append(a.get("href"))
+        if underline_links:
+            return [str(href) for href in underline_links if href]
+        # 2. 其次找“応募内容を確認する”按钮
         btn = soup.find("a", string=lambda s: isinstance(s, str) and "応募内容を確認する" in s)
         if btn and isinstance(btn, Tag):
             href = btn.get("href")
             if href:
                 return [str(href)]
-        # 兜底：抓所有a标签的href
+        # 3. 兜底：抓所有a标签的href
         for a in soup.find_all("a", href=True):
             if isinstance(a, Tag):
                 href = a.get("href")
@@ -578,11 +590,85 @@ def main():
 
     def process_one_message(driver, mid, msg):
         urls = extract_urls_from_email(msg)
-        target_url = pick_target_url(urls)
-        if not target_url:
-            print("未在邮件中找到允许域名的链接。")
-            return False
-        print("→ 目标链接：", target_url)
+        print("【调试】本邮件提取到的所有链接：", urls)
+        # 优先用蓝色按钮链接（extract_urls_from_email已优先返回按钮href）
+        tried_urls = set()
+        for idx, url in enumerate(urls):
+            if url in tried_urls:
+                continue
+            tried_urls.add(url)
+            target_url = pick_target_url([url])
+            print(f"【调试】第{idx+1}个链接 pick_target_url 结果：", target_url)
+            if not target_url:
+                continue
+            print("→ 目标链接：", target_url)
+            if not all([SITE_USER, SITE_PASS]):
+                print("请设置 SITE_USER / SITE_PASS 环境变量。")
+                return False
+            if not all([API_ID, API_PASSWORD]):
+                print("请设置 SMS_API_ID / SMS_API_PASSWORD 环境变量。")
+                return False
+            try:
+                site_login_and_open(driver, target_url, SITE_USER, SITE_PASS, target_url)
+                # 保存页面HTML和截图，便于排查页面结构
+                try:
+                    with open(f'debug_{idx+1}.html', 'w', encoding='utf-8') as f:
+                        f.write(driver.page_source)
+                    driver.save_screenshot(f'debug_{idx+1}.png')
+                    print(f"已保存当前页面HTML(debug_{idx+1}.html)和截图(debug_{idx+1}.png)")
+                except Exception as e:
+                    print("保存页面HTML或截图失败：", e)
+                phone = extract_phone_from_page(driver)
+                if not phone:
+                    print("未从页面提取到+81开头的电话号码，尝试下一个链接。")
+                    continue
+                print("抓取到的电话号码：", phone)
+                now_time = time.time()
+                cache = phone_send_cache.get(phone, {"last_time": 0.0, "last_content": None})
+                # 判断1分钟内是否已发过
+                if now_time - float(cache["last_time"]) < 60:
+                    # 1分钟内，切换内容
+                    if cache["last_content"] == "A":
+                        sms_text = SMS_TEXT_B
+                        cache["last_content"] = "B"
+                    else:
+                        sms_text = SMS_TEXT_A
+                        cache["last_content"] = "A"
+                    print(f"⚠️ 1分钟内重复发送，自动切换内容为: {cache['last_content']}")
+                else:
+                    # 超过1分钟，默认发A
+                    sms_text = SMS_TEXT_A
+                    cache["last_content"] = "A"
+                cache["last_time"] = now_time
+                phone_send_cache[phone] = cache
+                send_sms(phone, sms_text, use_report=USE_DELIVERY_REPORT)
+                # 标记该邮件为已读
+                try:
+                    box = imaplib.IMAP4_SSL(IMAP_HOST)
+                    box.login(IMAP_USER, IMAP_PASS)
+                    box.select("INBOX")
+                    box.store(mid, '+FLAGS', '\\Seen')
+                    box.logout()
+                except Exception as e:
+                    print("标记邮件为已读失败：", e)
+                return True
+            except Exception as e:
+                print("发生异常：", e)
+                import traceback
+                traceback.print_exc()
+                continue
+        print("所有可用链接均未能成功提取手机号。")
+        # 打印邮件HTML片段，辅助排查
+        try:
+            for part in msg.walk():
+                if part.get_content_type() == "text/html":
+                    html = part.get_payload(decode=True)
+                    if html:
+                        print("【调试】邮件HTML片段：", html[:1000])
+                    break
+        except Exception as e:
+            print("【调试】打印邮件HTML片段异常：", e)
+        return False
         if not all([SITE_USER, SITE_PASS]):
             print("请设置 SITE_USER / SITE_PASS 环境变量。")
             return False
