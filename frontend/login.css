@@ -1,0 +1,61 @@
+body {
+  background: #f8faef;
+  color: #6f8333;
+  font-family: "Segoe UI", "Arial", sans-serif;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  min-width: 100vw;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+#loginPage {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8faef;
+}
+#loginForm {
+  background: #fff;
+  padding: 40px 36px 32px 36px;
+  border-radius: 18px;
+  box-shadow: 0 2px 24px #8c956933;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+#loginForm input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  margin-top: 4px;
+  font-size: 1rem;
+  color: #6f8333;
+  background: #f8faef;
+  outline: none;
+  box-sizing: border-box;
+}
+#loginForm button[type="submit"],
+#loginBtn {
+  width: 100%;
+  padding: 12px 0;
+  background: #6f8333;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: background 0.18s;
+}
+#loginForm button[type="submit"]:hover,
+#loginBtn:hover {
+  background: #8c9569;
+}
