@@ -1,0 +1,30 @@
+{
+  "name": "sms-publisher-rpa-server",
+  "version": "1.0.0",
+  "description": "RPA Server for SMS Publisher - Firebase Edition",
+  "main": "src/backend/simple_server.js",
+  "scripts": {
+    "start": "node src/backend/simple_server.js",
+    "dev": "nodemon src/backend/simple_server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "rpa",
+    "sms",
+    "automation",
+    "firebase",
+    "express"
+  ],
+  "author": "SMS Publisher Team",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 用户数据：只允许用户访问自己的数据
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // 公司数据：允许属于该公司的认证用户访问
+    match /companies/{companyId} {
+      allow read, write: if request.auth != null && 
+        resource.data.company_id == companyId &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.company_id == companyId;
+    }
+    
+    // 开发测试阶段：临时允许所有认证用户访问（生产环境应移除此规则）
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

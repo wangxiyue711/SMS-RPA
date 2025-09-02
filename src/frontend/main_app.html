@@ -1,0 +1,1722 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RPA- メインダッシュボード</title>
+    <link rel="stylesheet" href="styles/main_app.css" />
+    <!-- Firebase v9 稳定版本 -->
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+      import {
+        getAuth,
+        onAuthStateChanged,
+        signOut,
+      } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+      import {
+        getFirestore,
+        doc,
+        getDoc,
+        setDoc,
+        updateDoc,
+      } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+      // Firebase 配置
+      const firebaseConfig = {
+        apiKey: "AIzaSyCYPji9NAg4T3z8JJERd_MniCbdteC9P2g",
+        authDomain: "rpa-sms-reclab.firebaseapp.com",
+        projectId: "rpa-sms-reclab",
+        storageBucket: "rpa-sms-reclab.firebasestorage.app",
+        messagingSenderId: "815415607045",
+        appId: "1:815415607045:web:e432022c62fbcb6899c16c",
+        measurementId: "G-53WG49PVJF",
+      };
+
+      // Firebase 初始化
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const db = getFirestore(app);
+
+      // 全局可用
+      window.auth = auth;
+      window.db = db;
+
+      // 为main_app添加必要的API函数
+      window.FirebaseAPI = {
+        async logoutUser() {
+          try {
+            await signOut(auth);
+            return { success: true };
+          } catch (error) {
+            return { success: false, error: error.message };
+          }
+        },
+
+        // 获取用户配置（基于UID）
+        async getUserConfig() {
+          if (!window.currentUser) {
+            throw new Error("ログインが必要です");
+          }
+
+          try {
+            const userConfigDoc = await getDoc(
+              doc(db, "user_configs", window.currentUser.uid)
+            );
+            if (userConfigDoc.exists()) {
+              return userConfigDoc.data();
+            } else {
+              // 如果用户配置不存在，创建默认配置
+              const defaultConfig = {
+                user_id: window.currentUser.uid,
+                email: window.currentUser.email,
+                email_config: {
+                  address: "",
+                  app_password: "",
+                },
+                sms_config: {
+                  provider: "",
+                  api_key: "",
+                  api_secret: "",
+                  endpoint: "",
+                },
+                created_at: new Date(),
+                updated_at: new Date(),
+              };
+
+              await setDoc(
+                doc(db, "user_configs", window.currentUser.uid),
+                defaultConfig
+              );
+              console.log("✅ 用户配置文档创建成功:", window.currentUser.uid);
+              return defaultConfig;
+            }
+          } catch (error) {
+            throw new Error("設定の取得に失敗しました: " + error.message);
+          }
+        },
+
+        // 更新用户邮箱配置
+        async updateEmailConfig(emailAddress, appPassword, sitePassword) {
+          if (!window.currentUser) {
+            throw new Error("ログインが必要です");
+          }
+
+          try {
+            console.log("🔍 开始更新邮箱配置:", {
+              uid: window.currentUser.uid,
+              email: emailAddress,
+            });
+
+            const userConfigRef = doc(
+              db,
+              "user_configs",
+              window.currentUser.uid
+            );
+
+            // 先检查文档是否存在
+            const docSnap = await getDoc(userConfigRef);
+
+            if (docSnap.exists()) {
+              // 文档存在，使用updateDoc更新
+              console.log("📄 文档存在，使用updateDoc更新");
+              await updateDoc(userConfigRef, {
+                email_config: {
+                  address: emailAddress,
+                  app_password: appPassword,
+                  site_password: sitePassword,
+                },
+                updated_at: new Date(),
+              });
+            } else {
+              // 文档不存在，使用setDoc创建
+              console.log("📝 文档不存在，使用setDoc创建");
+              await setDoc(userConfigRef, {
+                user_id: window.currentUser.uid,
+                email: window.currentUser.email,
+                email_config: {
+                  address: emailAddress,
+                  app_password: appPassword,
+                  site_password: sitePassword,
+                },
+                sms_config: {
+                  provider: "",
+                  api_key: "",
+                  api_secret: "",
+                  endpoint: "",
+                },
+                created_at: new Date(),
+                updated_at: new Date(),
+              });
+            }
+
+            console.log("✅ 邮箱配置保存成功:", {
+              uid: window.currentUser.uid,
+              email: emailAddress,
+            });
+
+            return { success: true };
+          } catch (error) {
+            console.error("❌ 邮箱配置保存失败:", error);
+            console.error("错误详细信息:", error.code, error.message);
+            return { success: false, error: error.message };
+          }
+        },
+
+        // SMS提供商自动检测
+        detectProvider(apiUrl) {
+          const url = (apiUrl || "").toLowerCase();
+          if (url.includes("sms-console.jp")) {
+            return "sms-console";
+          } else if (url.includes("twilio.com")) {
+            return "twilio";
+          } else if (url.includes("vonage.com") || url.includes("nexmo.com")) {
+            return "vonage";
+          } else if (url.includes("messagebird.com")) {
+            return "messagebird";
+          } else if (url.includes("plivo.com")) {
+            return "plivo";
+          } else {
+            return "custom"; // 自定义或其他提供商
+          }
+        },
+
+        // 更新用户SMS配置（5个必填字段）
+        async updateSmsConfig(apiUrl, apiId, apiPassword, smsTextA, smsTextB) {
+          if (!window.currentUser) {
+            throw new Error("ログインが必要です");
+          }
+
+          try {
+            console.log("🔍 開始更新SMS設定:", {
+              uid: window.currentUser.uid,
+              apiUrl: apiUrl,
+              apiId: apiId,
+            });
+
+            const userConfigRef = doc(
+              db,
+              "user_configs",
+              window.currentUser.uid
+            );
+
+            // 先检查文档是否存在
+            const docSnap = await getDoc(userConfigRef);
+
+            const smsConfig = {
+              api_url: apiUrl,
+              api_id: apiId,
+              api_password: apiPassword,
+              sms_text_a: smsTextA,
+              sms_text_b: smsTextB,
+              provider: this.detectProvider(apiUrl), // 在对象方法内使用this
+            };
+
+            if (docSnap.exists()) {
+              // 文档存在，使用updateDoc更新
+              console.log("📄 文档存在，使用updateDoc更新SMS設定");
+              await updateDoc(userConfigRef, {
+                sms_config: smsConfig,
+                updated_at: new Date(),
+              });
+            } else {
+              // 文档不存在，使用setDoc创建
+              console.log("📝 文档不存在，使用setDoc创建SMS設定");
+              await setDoc(userConfigRef, {
+                user_id: window.currentUser.uid,
+                email: window.currentUser.email,
+                email_config: {
+                  address: "",
+                  app_password: "",
+                  site_password: "",
+                },
+                sms_config: smsConfig,
+                created_at: new Date(),
+                updated_at: new Date(),
+              });
+            }
+
+            console.log("✅ SMS設定保存成功:", {
+              uid: window.currentUser.uid,
+              fields: Object.keys(smsConfig).length,
+            });
+
+            return { success: true };
+          } catch (error) {
+            console.error("❌ SMS設定保存失敗:", error);
+            console.error("錯誤詳細:", error.code, error.message);
+            return { success: false, error: error.message };
+          }
+        },
+
+        async getRpaConfig() {
+          try {
+            const config = await this.getUserConfig();
+            return {
+              success: true,
+              config: {
+                email: config.email_config?.address,
+                emailPassword: config.email_config?.app_password,
+                sitePassword: config.email_config?.site_password,
+                smsProvider: config.sms_config?.provider,
+                smsApiUrl: config.sms_config?.api_url,
+                smsApiId: config.sms_config?.api_id,
+                smsApiPassword: config.sms_config?.api_password,
+                smsTextA: config.sms_config?.sms_text_a,
+                smsTextB: config.sms_config?.sms_text_b,
+              },
+            };
+          } catch (error) {
+            return { success: false, error: error.message };
+          }
+        },
+      };
+
+      // 认证状态检查并加载用户数据
+      onAuthStateChanged(auth, async (user) => {
+        if (!user) {
+          console.log("❌ 用户未登录，跳转到登录页");
+          window.location.href = "login.html";
+        } else {
+          console.log("✅ 用户已登录:", user.email, "UID:", user.uid);
+          console.log("🔍 用户详细信息:", {
+            email: user.email,
+            uid: user.uid,
+            emailVerified: user.emailVerified,
+            displayName: user.displayName,
+          });
+
+          window.currentUser = user;
+
+          // 更新用户信息显示
+          const userEmailElement = document.getElementById("userEmail");
+
+          if (userEmailElement) {
+            userEmailElement.textContent = user.email;
+            console.log("📧 已更新用户邮箱显示:", user.email);
+          }
+
+          // 加载用户配置到表单
+          try {
+            await loadUserConfigToForms();
+            console.log("✅ 用户配置加载完成");
+          } catch (error) {
+            console.error("⚠️ 加载用户配置失败:", error);
+          }
+        }
+      });
+
+      // 加载用户配置到表单
+      async function loadUserConfigToForms() {
+        try {
+          console.log("📥 开始加载用户配置到表单...");
+          const config = await window.FirebaseAPI.getUserConfig();
+
+          console.log("📊 获取到的用户配置:", config);
+
+          // 加载邮箱设置到表单
+          if (config.email_config) {
+            const emailInput = document.getElementById("emailAddress");
+            const passwordInput = document.getElementById("emailAppPassword");
+            const sitePasswordInput = document.getElementById("sitePassword");
+
+            if (emailInput)
+              emailInput.value = config.email_config.address || "";
+            if (passwordInput)
+              passwordInput.value = config.email_config.app_password || "";
+            if (sitePasswordInput)
+              sitePasswordInput.value = config.email_config.site_password || "";
+
+            console.log("✅ 邮箱设置已加载到表单");
+          }
+
+          // 加载SMS设置到表单 (支持多种API提供商)
+          if (config.sms_config) {
+            const urlInput = document.getElementById("smsApiUrl");
+            const idInput = document.getElementById("smsApiId");
+            const passwordInput = document.getElementById("smsApiPassword");
+            const textAInput = document.getElementById("smsTextA");
+            const textBInput = document.getElementById("smsTextB");
+
+            if (urlInput) urlInput.value = config.sms_config.api_url || "";
+            if (idInput) idInput.value = config.sms_config.api_id || "";
+            if (passwordInput)
+              passwordInput.value = config.sms_config.api_password || "";
+            if (textAInput)
+              textAInput.value = config.sms_config.sms_text_a || "";
+            if (textBInput)
+              textBInput.value = config.sms_config.sms_text_b || "";
+
+            console.log("✅ SMS設定已加載到表單 (5項目)");
+          }
+        } catch (error) {
+          console.error("⚠️ 加载用户配置失败:", error);
+        }
+      }
+
+      console.log("✅ Main App Firebase initialized");
+    </script>
+  </head>
+  <body>
+    <div class="container">
+      <!-- 顶部Header -->
+      <header class="header">
+        <div class="brand">
+          <span class="brand-title">🤖 XXX XXXX</span>
+        </div>
+        <div class="user-info">
+          <span id="userEmail">読み込み中...</span>
+          <button id="logoutBtn" onclick="handleLogout()">ログアウト</button>
+        </div>
+      </header>
+
+      <!-- 主体部分 -->
+      <div class="main-wrapper">
+        <!-- 左侧菜单栏 -->
+        <nav class="sidebar">
+          <ul class="nav-menu">
+            <li><a href="#" class="active" id="navMail">アカウント設定</a></li>
+            <li><a href="#" id="navApi">SMS設定</a></li>
+            <li><a href="#" id="navSms">SMS送信</a></li>
+            <li><a href="#" id="navRpa">RPA実行</a></li>
+          </ul>
+        </nav>
+
+        <!-- 右侧内容区 -->
+        <section class="main-content">
+          <!-- アカウント設定パネル -->
+          <div class="content-panel active" id="panelMail">
+            <div class="panel-header">
+              <h2 class="panel-title">📧 アカウント設定</h2>
+              <p class="panel-description">
+                RPA自動化に必要なアカウント情報を設定してください（3項目のみ）
+              </p>
+            </div>
+
+            <form class="ai-form" onsubmit="saveAccountConfig(event)">
+              <label for="emailAddress">📬 メールアドレス</label>
+              <input
+                type="email"
+                id="emailAddress"
+                name="emailAddress"
+                placeholder="example@gmail.com"
+                required
+                autocomplete="off"
+              />
+              <div
+                class="ai-hint"
+                style="margin-top: 4px; font-size: 12px; color: #666"
+              >
+                RPAが監視するGmailアドレス（Indeed求人メール受信用）
+              </div>
+
+              <label for="emailAppPassword">🔑 Gmailアプリパスワード</label>
+              <input
+                type="password"
+                id="emailAppPassword"
+                name="appPassword"
+                placeholder="16文字のアプリパスワード"
+                required
+              />
+              <div
+                class="ai-hint"
+                style="margin-top: 4px; font-size: 12px; color: #666"
+              >
+                Google設定→セキュリティ→2段階認証→アプリパスワードで生成
+              </div>
+
+              <label for="sitePassword">🌐 Indeedログインパスワード</label>
+              <input
+                type="password"
+                id="sitePassword"
+                name="sitePassword"
+                placeholder="Indeedアカウントのパスワード"
+                required
+              />
+              <div
+                class="ai-hint"
+                style="margin-top: 4px; font-size: 12px; color: #666"
+              >
+                Indeed求人サイトにログインするためのパスワード
+              </div>
+
+              <button type="submit">💾 アカウント設定を保存</button>
+            </form>
+
+            <div
+              id="accountStatus"
+              class="ai-hint"
+              style="margin-top: 16px; min-height: 20px"
+            ></div>
+          </div>
+
+          <!-- SMS設定パネル -->
+          <div class="content-panel" id="panelApi">
+            <div class="panel-header">
+              <h2 class="panel-title">📱 SMS設定</h2>
+              <p class="panel-description">
+                SMS送信API設定とメッセージテンプレートを設定してください（5項目必須）<br />
+                <small
+                  >対応API: SMS Console、Twilio、その他HTTP API提供商</small
+                >
+              </p>
+            </div>
+
+            <form class="ai-form" onsubmit="saveSmsConfig(event)">
+              <label for="smsApiUrl">🌐 SMS API URL</label>
+              <input
+                type="url"
+                id="smsApiUrl"
+                name="smsApiUrl"
+                placeholder="例: https://www.sms-console.jp/api/ 或 https://api.twilio.com/2010-04-01/"
+                required
+                autocomplete="off"
+              />
+              <div
+                class="ai-hint"
+                style="margin-top: 4px; font-size: 12px; color: #666"
+              >
+                各社のSMS API提供商のエンドポイントURL（SMS Console、Twilio等）
+              </div>
+
+              <label for="smsApiId">🔑 SMS API ID / ユーザー名</label>
+              <input
+                type="text"
+                id="smsApiId"
+                name="smsApiId"
+                placeholder="例: sm000206_user (SMS Console) 或 AC1234567890abcdef (Twilio)"
+                required
+                autocomplete="off"
+              />
+              <div
+                class="ai-hint"
+                style="margin-top: 4px; font-size: 12px; color: #666"
+              >
+                SMS API提供商のアカウントID、ユーザー名、またはAccount SID
+              </div>
+
+              <label for="smsApiPassword"
+                >🔐 SMS API パスワード / トークン</label
+              >
+              <input
+                type="password"
+                id="smsApiPassword"
+                name="smsApiPassword"
+                placeholder="API専用パスワード 或 Auth Token"
+                required
+              />
+              <div
+                class="ai-hint"
+                style="margin-top: 4px; font-size: 12px; color: #666"
+              >
+                SMS API認証用のパスワード、トークン、またはAuth Token
+              </div>
+
+              <label for="smsTextA">📄 SMSテンプレートA（1回目送信用）</label>
+              <textarea
+                id="smsTextA"
+                name="smsTextA"
+                placeholder="りくらぼ株式会社です&#10;ご応募ありがとうございます&#10;LINEで選考案内→&#10;https://line.me/R/ti/p/@637nkhcm"
+                required
+                rows="4"
+              ></textarea>
+              <div
+                class="ai-hint"
+                style="margin-top: 4px; font-size: 12px; color: #666"
+              >
+                初回または1分経過後の送信で使用するメッセージ
+              </div>
+
+              <label for="smsTextB">📝 SMSテンプレートB（2回目送信用）</label>
+              <textarea
+                id="smsTextB"
+                name="smsTextB"
+                placeholder="りくらぼ株式会社です。&#10;ご応募ありがとうございます！&#10;LINEで選考案内→&#10;https://line.me/R/ti/p/@637nkhcm"
+                required
+                rows="4"
+              ></textarea>
+              <div
+                class="ai-hint"
+                style="margin-top: 4px; font-size: 12px; color: #666"
+              >
+                1分以内の重複送信で使用する代替メッセージ
+              </div>
+
+              <button type="submit">💾 SMS設定を保存</button>
+            </form>
+
+            <div
+              id="smsStatus"
+              class="ai-hint"
+              style="margin-top: 16px; min-height: 20px"
+            ></div>
+          </div>
+
+          <!-- SMS送信パネル -->
+          <div class="content-panel" id="panelSms">
+            <div class="panel-header">
+              <h2 class="panel-title">📱 SMS送信</h2>
+              <p class="panel-description">
+                個別にSMSを送信できます。手動で電話番号とメッセージを入力して送信してください。
+              </p>
+            </div>
+
+            <!-- 连接状态检查 -->
+            <div
+              id="connectionStatus"
+              style="
+                margin-bottom: 16px;
+                padding: 8px;
+                border-radius: 4px;
+                font-size: 12px;
+              "
+            >
+              <span id="statusText">🔍 检查服务器连接状态...</span>
+            </div>
+
+            <form class="ai-form" onsubmit="sendIndividualSms(event)">
+              <label for="recipientPhone">📞 送信先電話番号</label>
+              <input
+                type="tel"
+                id="recipientPhone"
+                name="recipientPhone"
+                placeholder="例: +819012345678 または 09012345678"
+                required
+                autocomplete="off"
+                pattern="^(\+81|0)?[0-9]{10,11}$"
+              />
+              <div
+                class="ai-hint"
+                style="margin-top: 4px; font-size: 12px; color: #666"
+              >
+                日本の携帯電話番号（+81形式または0から始まる形式）
+              </div>
+
+              <label for="smsContent">💬 送信メッセージ</label>
+              <textarea
+                id="smsContent"
+                name="smsContent"
+                placeholder="送信したいメッセージを入力してください&#10;&#10;例：&#10;こんにちは！&#10;お疲れ様です。"
+                required
+                rows="6"
+                maxlength="670"
+              ></textarea>
+              <div
+                class="ai-hint"
+                style="margin-top: 4px; font-size: 12px; color: #666"
+              >
+                最大670文字まで。日本語は全角文字で計算されます。
+              </div>
+
+              <div style="margin: 16px 0">
+                <label>
+                  <input
+                    type="checkbox"
+                    id="useTemplate"
+                    onchange="toggleTemplate()"
+                  />
+                  既存のテンプレートを使用
+                </label>
+              </div>
+
+              <div
+                id="templateSelector"
+                style="display: none; margin-bottom: 16px"
+              >
+                <button
+                  type="button"
+                  onclick="loadTemplate('A')"
+                  style="
+                    margin-right: 8px;
+                    padding: 6px 12px;
+                    background: #6f8333;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                  "
+                >
+                  📄 テンプレートA
+                </button>
+                <button
+                  type="button"
+                  onclick="loadTemplate('B')"
+                  style="
+                    padding: 6px 12px;
+                    background: #8fa446;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                  "
+                >
+                  📝 テンプレートB
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                style="
+                  background: linear-gradient(135deg, #6f8333 0%, #8fa446 100%);
+                  color: white;
+                  font-weight: bold;
+                "
+              >
+                📤 SMS送信
+              </button>
+            </form>
+
+            <div
+              id="smsResult"
+              class="ai-hint"
+              style="margin-top: 16px; min-height: 20px"
+            ></div>
+
+            <!-- 送信履歴 -->
+            <div style="margin-top: 32px">
+              <h3 style="color: #6f8333; margin-bottom: 16px">📋 送信履歴</h3>
+              <div
+                id="smsHistory"
+                style="
+                  max-height: 300px;
+                  overflow-y: auto;
+                  border: 1px solid #e8eae0;
+                  border-radius: 8px;
+                  padding: 12px;
+                "
+              >
+                <p style="color: #666; text-align: center">
+                  送信履歴はここに表示されます
+                </p>
+              </div>
+              <button
+                type="button"
+                onclick="clearSmsHistory()"
+                style="
+                  margin-top: 8px;
+                  padding: 4px 8px;
+                  background: #dc3545;
+                  color: white;
+                  border: none;
+                  border-radius: 4px;
+                  cursor: pointer;
+                  font-size: 12px;
+                "
+              >
+                履歴をクリア
+              </button>
+            </div>
+          </div>
+
+          <!-- RPA実行パネル -->
+          <div class="content-panel" id="panelRpa">
+            <div class="panel-header">
+              <h2 class="panel-title">RPA実行</h2>
+            </div>
+
+            <!-- 现在的设定状况 -->
+            <div class="config-status">
+              <h3
+                style="margin-bottom: 16px; color: #8c9569; font-size: 1.1rem"
+              >
+                現在の設定状況
+              </h3>
+              <div id="configDisplay" class="config-display">
+                <div class="config-item">
+                  <span class="icon">📧</span>
+                  <span
+                    >メール: <span id="emailStatus">読み込み中...</span></span
+                  >
+                  <span class="status-icon"></span>
+                </div>
+                <div class="config-item">
+                  <span class="icon">📱</span>
+                  <span
+                    >SMS API: <span id="smsApiStatus">読み込み中...</span></span
+                  >
+                  <span class="status-icon"></span>
+                </div>
+                <div class="config-item">
+                  <span class="icon">🔑</span>
+                  <span
+                    >API ID: <span id="apiIdStatus">読み込み中...</span></span
+                  >
+                  <span class="status-icon"></span>
+                </div>
+                <div class="config-item">
+                  <span class="icon">🔐</span>
+                  <span
+                    >API パスワード:
+                    <span id="apiPasswordStatus">読み込み中...</span></span
+                  >
+                  <span class="status-icon"></span>
+                </div>
+                <div class="config-item">
+                  <span class="icon">📄</span>
+                  <span
+                    >テンプレートA:
+                    <span id="templateAStatus">読み込み中...</span></span
+                  >
+                  <span class="status-icon"></span>
+                </div>
+                <div class="config-item">
+                  <span class="icon">📝</span>
+                  <span
+                    >テンプレートB:
+                    <span id="templateBStatus">読み込み中...</span></span
+                  >
+                  <span class="status-icon"></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- RPA实行按钮 -->
+            <button
+              class="btn btn-primary"
+              onclick="executeRpa()"
+              style="margin-top: 20px; padding: 12px 30px; font-size: 1.1rem"
+            >
+              🚀 RPA実行
+            </button>
+
+            <!-- 结果显示区域 -->
+            <div
+              id="rpaResult"
+              class="result-display"
+              style="margin-top: 20px; display: none"
+            ></div>
+
+            <!-- 提示信息 -->
+            <div class="ai-hint" style="margin-top: 24px">
+              RPA実行前に、アカウント設定とSMS
+              API設定が完了していることを確認してください。
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      // API 配置
+      const API_BASE_URL = "http://localhost:8888";
+
+      // 左侧菜单切换逻辑
+      document.addEventListener("DOMContentLoaded", function () {
+        // 对应的按钮与面板映射
+        const navs = [
+          { btn: "navMail", panel: "panelMail" },
+          { btn: "navApi", panel: "panelApi" },
+          { btn: "navSms", panel: "panelSms" },
+          { btn: "navRpa", panel: "panelRpa" },
+        ];
+
+        function hideAll() {
+          navs.forEach(({ btn, panel }) => {
+            const b = document.getElementById(btn);
+            const p = document.getElementById(panel);
+            if (b) b.classList.remove("active");
+            if (p) {
+              p.classList.remove("active");
+              p.style.display = "none";
+            }
+          });
+        }
+
+        navs.forEach(({ btn, panel }) => {
+          const b = document.getElementById(btn);
+          if (!b) return;
+          b.addEventListener("click", function () {
+            hideAll();
+            b.classList.add("active");
+            const p = document.getElementById(panel);
+            if (p) {
+              p.classList.add("active");
+              p.style.display = "block";
+            }
+
+            // RPA タブの場合、設定を読み込み
+            if (panel === "panelRpa") {
+              // 首先显示加载状态
+              initializeRpaStatus();
+              // 然后加载实际配置
+              loadRpaConfig();
+            }
+          });
+        });
+
+        // 初始化：默认显示 mail 面板
+        const first = navs[0];
+        const b = document.getElementById(first.btn);
+        const p = document.getElementById(first.panel);
+        if (b) b.classList.add("active");
+        if (p) {
+          p.classList.add("active");
+          p.style.display = "block";
+        }
+      });
+
+      // ログアウト処理
+      async function handleLogout() {
+        if (confirm("ログアウトしますか？")) {
+          await window.FirebaseAPI.logoutUser();
+          window.location.href = "login.html";
+        }
+      }
+
+      // アカウント設定保存
+      async function saveAccountConfig(event) {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+
+        console.log("🔍 開始保存アカウント設定...");
+        console.log("📧 メールアドレス:", formData.get("emailAddress"));
+        console.log("👤 現在のユーザー:", window.currentUser);
+
+        if (!window.currentUser) {
+          document.getElementById("accountStatus").innerHTML =
+            '<span style="color: #d32f2f;">❌ ユーザーがログインしていません</span>';
+          return;
+        }
+
+        try {
+          document.getElementById("accountStatus").innerHTML =
+            '<span style="color: #1976d2;">💾 設定を保存中...</span>';
+
+          const result = await window.FirebaseAPI.updateEmailConfig(
+            formData.get("emailAddress"),
+            formData.get("appPassword"),
+            formData.get("sitePassword")
+          );
+
+          console.log("📊 保存結果:", result);
+
+          if (result.success) {
+            document.getElementById("accountStatus").innerHTML =
+              '<span style="color: #388e3c;">✅ アカウント設定が保存されました</span>';
+          } else {
+            document.getElementById("accountStatus").innerHTML =
+              '<span style="color: #d32f2f;">❌ エラー: ' +
+              result.error +
+              "</span>";
+            console.error("保存失敗詳細:", result);
+          }
+        } catch (error) {
+          console.error("💥 保存異常:", error);
+          document.getElementById("accountStatus").innerHTML =
+            '<span style="color: #d32f2f;">❌ エラー: ' +
+            error.message +
+            "</span>";
+        }
+      }
+
+      // SMS設定保存
+      async function saveSmsConfig(event) {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+
+        console.log("🔍 開始保存SMS設定...");
+        console.log("👤 現在のユーザー:", window.currentUser);
+
+        if (!window.currentUser) {
+          document.getElementById("smsStatus").innerHTML =
+            '<span style="color: #d32f2f;">❌ ユーザーがログインしていません</span>';
+          return;
+        }
+
+        try {
+          document.getElementById("smsStatus").innerHTML =
+            '<span style="color: #1976d2;">💾 設定を保存中...</span>';
+
+          const result = await window.FirebaseAPI.updateSmsConfig(
+            formData.get("smsApiUrl"),
+            formData.get("smsApiId"),
+            formData.get("smsApiPassword"),
+            formData.get("smsTextA"),
+            formData.get("smsTextB")
+          );
+
+          console.log("📊 保存結果:", result);
+
+          if (result.success) {
+            document.getElementById("smsStatus").innerHTML =
+              '<span style="color: #388e3c;">✅ SMS設定が保存されました（5項目完了）</span>';
+          } else {
+            document.getElementById("smsStatus").innerHTML =
+              '<span style="color: #d32f2f;">❌ エラー: ' +
+              result.error +
+              "</span>";
+            console.error("保存失敗詳細:", result);
+          }
+        } catch (error) {
+          console.error("💥 保存異常:", error);
+          document.getElementById("smsStatus").innerHTML =
+            '<span style="color: #d32f2f;">❌ エラー: ' +
+            error.message +
+            "</span>";
+        }
+      }
+
+      // 初始化RPA状态显示
+      function initializeRpaStatus() {
+        // 设置所有配置项为加载状态
+        updateConfigStatus("emailStatus", "loading", "読み込み中...");
+        updateConfigStatus("smsApiStatus", "loading", "読み込み中...");
+        updateConfigStatus("apiIdStatus", "loading", "読み込み中...");
+        updateConfigStatus("apiPasswordStatus", "loading", "読み込み中...");
+        updateConfigStatus("templateAStatus", "loading", "読み込み中...");
+        updateConfigStatus("templateBStatus", "loading", "読み込み中...");
+      }
+
+      // RPA設定読み込み
+      async function loadRpaConfig() {
+        try {
+          const result = await window.FirebaseAPI.getRpaConfig();
+
+          if (result.success) {
+            const config = result.config;
+
+            // 更新各项配置状态
+            updateConfigStatus(
+              "emailStatus",
+              config.email,
+              config.email || "未設定"
+            );
+            updateConfigStatus(
+              "smsApiStatus",
+              config.smsApiUrl,
+              config.smsApiUrl ? `SMS-CONSOLE (${config.smsApiUrl})` : "未設定"
+            );
+            updateConfigStatus(
+              "apiIdStatus",
+              config.smsApiId,
+              config.smsApiId ? "設定済み" : "未設定"
+            );
+            updateConfigStatus(
+              "apiPasswordStatus",
+              config.smsApiPassword,
+              config.smsApiPassword ? "設定済み" : "未設定"
+            );
+            updateConfigStatus(
+              "templateAStatus",
+              config.smsTextA,
+              config.smsTextA ? "設定済み" : "未設定"
+            );
+            updateConfigStatus(
+              "templateBStatus",
+              config.smsTextB,
+              config.smsTextB ? "設定済み" : "未設定"
+            );
+          } else {
+            // 如果获取配置失败，显示错误状态
+            updateConfigStatus("emailStatus", false, "エラー");
+            updateConfigStatus("smsApiStatus", false, "エラー");
+            updateConfigStatus("apiIdStatus", false, "エラー");
+            updateConfigStatus("apiPasswordStatus", false, "エラー");
+            updateConfigStatus("templateAStatus", false, "エラー");
+            updateConfigStatus("templateBStatus", false, "エラー");
+          }
+        } catch (error) {
+          console.error("設定読み込みエラー:", error);
+          // 错误时显示错误状态
+          updateConfigStatus("emailStatus", false, "エラー");
+          updateConfigStatus("smsApiStatus", false, "エラー");
+          updateConfigStatus("apiIdStatus", false, "エラー");
+          updateConfigStatus("apiPasswordStatus", false, "エラー");
+          updateConfigStatus("templateAStatus", false, "エラー");
+          updateConfigStatus("templateBStatus", false, "エラー");
+        }
+      }
+
+      // 更新配置状态显示
+      function updateConfigStatus(elementId, isConfigured, displayText) {
+        const statusElement = document.getElementById(elementId);
+        const statusIcon =
+          statusElement.parentElement.querySelector(".status-icon");
+
+        if (statusElement) {
+          statusElement.textContent = displayText;
+        }
+
+        if (statusIcon) {
+          // 清除所有状态类
+          statusIcon.className = "status-icon";
+
+          if (isConfigured === "loading") {
+            // 加载状态
+            statusIcon.classList.add("status-pending");
+            statusIcon.textContent = "⏳";
+          } else if (isConfigured) {
+            // 配置正确状态
+            statusIcon.classList.add("status-ok");
+            statusIcon.textContent = "✅";
+          } else {
+            // 配置错误或未设置状态
+            statusIcon.classList.add("status-error");
+            statusIcon.textContent = "❌";
+          }
+        }
+      }
+
+      // RPA実行状態管理
+      let rpaStatus = {
+        isRunning: false,
+        processId: null,
+        startTime: null,
+        logs: [],
+      };
+
+      // RPA実行
+      async function executeRpa() {
+        try {
+          const resultDiv = document.getElementById("rpaResult");
+          resultDiv.style.display = "block";
+          resultDiv.innerHTML = "<p>🔄 RPA設定を確認中...</p>";
+          resultDiv.className = "result-display";
+
+          // 設定確認
+          const configResult = await window.FirebaseAPI.getRpaConfig();
+
+          if (!configResult.success) {
+            throw new Error(configResult.error);
+          }
+
+          const config = configResult.config;
+
+          // 設定完了チェック (RPA実行に必要な全項目)
+          const isConfigComplete =
+            config.email &&
+            config.emailPassword &&
+            config.sitePassword &&
+            config.smsApiUrl &&
+            config.smsApiId &&
+            config.smsApiPassword &&
+            config.smsTextA &&
+            config.smsTextB;
+
+          if (!isConfigComplete) {
+            resultDiv.innerHTML = `
+              <h3>⚠️ 設定不完全</h3>
+              <p>RPA実行前に以下の設定を完了してください:</p>
+              <ul style="margin: 12px 0; padding-left: 20px;">
+                  ${!config.email ? "<li>📧 Gmail/Indeedアドレス</li>" : ""}
+                  ${
+                    !config.emailPassword
+                      ? "<li>🔑 Gmailアプリパスワード</li>"
+                      : ""
+                  }
+                  ${
+                    !config.sitePassword
+                      ? "<li>🌐 Indeedログインパスワード</li>"
+                      : ""
+                  }
+                  ${!config.smsApiUrl ? "<li>🌐 SMS API URL</li>" : ""}
+                  ${!config.smsApiId ? "<li>🔑 SMS API ID</li>" : ""}
+                  ${
+                    !config.smsApiPassword
+                      ? "<li>🔐 SMS API パスワード</li>"
+                      : ""
+                  }
+                  ${!config.smsTextA ? "<li>� SMSテンプレートA</li>" : ""}
+                  ${!config.smsTextB ? "<li>📝 SMSテンプレートB</li>" : ""}
+              </ul>
+            `;
+            resultDiv.className = "result-display error";
+            return;
+          }
+
+          // 現在のユーザーUID取得
+          if (!window.currentUser) {
+            throw new Error("ユーザーがログインしていません");
+          }
+
+          const userUid = window.currentUser.uid;
+
+          // RPA実行モードの選択
+          const mode = await showRpaModeDialog();
+          if (!mode) {
+            resultDiv.innerHTML = "<p>RPA実行がキャンセルされました。</p>";
+            return;
+          }
+
+          resultDiv.innerHTML = "<p>🚀 RPA プロセスを開始しています...</p>";
+
+          // RPA実行API呼び出し
+          const response = await fetch(`${API_BASE_URL}/api/rpa/start`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userUid: userUid,
+              mode: mode.mode,
+              interval: mode.interval || 5,
+            }),
+          });
+
+          const result = await response.json();
+
+          if (result.success) {
+            rpaStatus.isRunning = true;
+            rpaStatus.processId = userUid;
+            rpaStatus.startTime = new Date();
+
+            resultDiv.innerHTML = `
+              <h3>🚀 RPA実行開始</h3>
+              <p>✅ RPA プロセスが正常に開始されました。</p>
+              <div style="margin: 16px 0;">
+                <strong>実行モード:</strong> ${
+                  mode.mode === "1" ? "単発実行" : "連続監視"
+                }${mode.mode === "2" ? ` (${mode.interval}秒間隔)` : ""}
+              </div>
+              <div style="margin: 16px 0;">
+                <button onclick="stopRpa()" style="background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                  🛑 RPA停止
+                </button>
+                <button onclick="refreshRpaStatus()" style="background: #17a2b8; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-left: 8px;">
+                  � 状態更新
+                </button>
+                <button onclick="showRpaLogs()" style="background: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-left: 8px;">
+                  📋 ログ表示
+                </button>
+              </div>
+              <div id="rpaStatusInfo" style="margin-top: 16px; padding: 12px; background: #e8f5e8; border-radius: 4px; font-size: 0.9em;">
+                <div>開始時間: ${new Date().toLocaleString()}</div>
+                <div>プロセスID: ${userUid.slice(0, 8)}...</div>
+              </div>
+            `;
+            resultDiv.className = "result-display success";
+
+            // 定期的に状態を更新
+            startStatusPolling();
+          } else {
+            throw new Error(result.error);
+          }
+        } catch (error) {
+          console.error("RPA execution error:", error);
+          document.getElementById("rpaResult").innerHTML = `
+            <h3>❌ RPA実行エラー</h3>
+            <p>エラー: ${error.message}</p>
+            <div style="margin-top: 12px; font-size: 0.9em; color: #666;">
+              RPA サーバーが起動しているか確認してください。<br>
+              コマンド: <code>npm start</code> または <code>node rpa_server.js</code>
+            </div>
+          `;
+          document.getElementById("rpaResult").className =
+            "result-display error";
+        }
+      }
+
+      // RPA実行モード選択ダイアログ
+      function showRpaModeDialog() {
+        return new Promise((resolve) => {
+          const dialog = document.createElement("div");
+          dialog.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.5); display: flex; align-items: center; 
+            justify-content: center; z-index: 10000;
+          `;
+
+          dialog.innerHTML = `
+            <div style="background: white; padding: 24px; border-radius: 8px; max-width: 400px; width: 90%;">
+              <h3 style="margin: 0 0 16px 0; color: #6f8333;">� RPA実行モード選択</h3>
+              <div style="margin: 16px 0;">
+                <label style="display: block; margin: 8px 0; cursor: pointer;">
+                  <input type="radio" name="rpaMode" value="1" checked style="margin-right: 8px;">
+                  <strong>単発実行</strong> - 現在の未読メールを1回だけ処理
+                </label>
+                <label style="display: block; margin: 8px 0; cursor: pointer;">
+                  <input type="radio" name="rpaMode" value="2" style="margin-right: 8px;">
+                  <strong>連続監視</strong> - 新しいメールを継続的に監視・処理
+                </label>
+              </div>
+              <div id="intervalSetting" style="margin: 16px 0; display: none;">
+                <label>監視間隔（秒）: 
+                  <input type="number" id="intervalInput" value="5" min="1" max="3600" 
+                         style="width: 60px; margin-left: 8px;">
+                </label>
+              </div>
+              <div style="margin-top: 20px; text-align: right;">
+                <button onclick="this.closest('div').parentElement.remove(); resolve(null);" 
+                        style="background: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 4px; margin-right: 8px;">
+                  キャンセル
+                </button>
+                <button onclick="
+                  const mode = document.querySelector('input[name=rpaMode]:checked').value;
+                  const interval = document.getElementById('intervalInput').value;
+                  this.closest('div').parentElement.remove();
+                  resolve({mode, interval: parseInt(interval)});
+                " style="background: #6f8333; color: white; border: none; padding: 8px 16px; border-radius: 4px;">
+                  実行開始
+                </button>
+              </div>
+            </div>
+          `;
+
+          // 連続監視選択時に間隔設定を表示
+          dialog.querySelectorAll('input[name="rpaMode"]').forEach((radio) => {
+            radio.addEventListener("change", () => {
+              const intervalSetting = dialog.querySelector("#intervalSetting");
+              intervalSetting.style.display =
+                radio.value === "2" ? "block" : "none";
+            });
+          });
+
+          document.body.appendChild(dialog);
+        });
+      }
+
+      // RPA停止
+      async function stopRpa() {
+        try {
+          if (!rpaStatus.isRunning || !window.currentUser) {
+            return;
+          }
+
+          const response = await fetch(`${API_BASE_URL}/api/rpa/stop`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userUid: window.currentUser.uid,
+            }),
+          });
+
+          const result = await response.json();
+
+          if (result.success) {
+            rpaStatus.isRunning = false;
+            rpaStatus.processId = null;
+
+            const resultDiv = document.getElementById("rpaResult");
+            resultDiv.innerHTML = `
+              <h3>🛑 RPA停止完了</h3>
+              <p>✅ RPA プロセスが正常に停止されました。</p>
+              <p>実行時間: ${
+                rpaStatus.startTime
+                  ? Math.round((new Date() - rpaStatus.startTime) / 1000)
+                  : 0
+              }秒</p>
+            `;
+            resultDiv.className = "result-display";
+
+            // ポーリング停止
+            stopStatusPolling();
+          }
+        } catch (error) {
+          console.error("RPA stop error:", error);
+        }
+      }
+
+      // RPA状態更新
+      async function refreshRpaStatus() {
+        try {
+          if (!window.currentUser) return;
+
+          const response = await fetch(
+            `${API_BASE_URL}/api/rpa/status/${window.currentUser.uid}`
+          );
+          const result = await response.json();
+
+          if (result.success) {
+            const statusInfo = document.getElementById("rpaStatusInfo");
+            if (statusInfo) {
+              statusInfo.innerHTML = `
+                <div>状態: ${getStatusText(result.status)}</div>
+                <div>開始時間: ${new Date(
+                  result.startTime
+                ).toLocaleString()}</div>
+                ${
+                  result.endTime
+                    ? `<div>終了時間: ${new Date(
+                        result.endTime
+                      ).toLocaleString()}</div>`
+                    : ""
+                }
+                <div>ログ件数: ${result.logCount || 0}件</div>
+                ${
+                  result.error
+                    ? `<div style="color: red;">エラー: ${result.error}</div>`
+                    : ""
+                }
+              `;
+            }
+
+            // プロセスが終了している場合
+            if (result.status === "completed" || result.status === "error") {
+              rpaStatus.isRunning = false;
+              stopStatusPolling();
+            }
+          }
+        } catch (error) {
+          console.error("Status refresh error:", error);
+        }
+      }
+
+      // RPA ログ表示
+      async function showRpaLogs() {
+        try {
+          if (!window.currentUser) return;
+
+          const response = await fetch(
+            `${API_BASE_URL}/api/rpa/logs/${window.currentUser.uid}?limit=100`
+          );
+          const result = await response.json();
+
+          if (result.success) {
+            const logWindow = window.open(
+              "",
+              "rpaLogs",
+              "width=800,height=600,scrollbars=yes"
+            );
+            logWindow.document.write(`
+              <html>
+                <head><title>RPA ログ - ${window.currentUser.uid}</title></head>
+                <body style="font-family: monospace; padding: 16px; background: #f5f5f5;">
+                  <h2>🔍 RPA 実行ログ</h2>
+                  <div style="margin: 8px 0;">総ログ数: ${
+                    result.totalLogs
+                  }件</div>
+                  <hr>
+                  ${result.logs
+                    .map(
+                      (log) => `
+                    <div style="margin: 4px 0; padding: 8px; background: ${
+                      log.type === "stderr" ? "#ffe6e6" : "white"
+                    }; border-left: 3px solid ${
+                        log.type === "stderr" ? "#dc3545" : "#28a745"
+                      };">
+                      <div style="font-size: 0.8em; color: #666;">${new Date(
+                        log.timestamp
+                      ).toLocaleString()} [${log.type.toUpperCase()}]</div>
+                      <pre style="margin: 4px 0; white-space: pre-wrap;">${
+                        log.message
+                      }</pre>
+                    </div>
+                  `
+                    )
+                    .join("")}
+                </body>
+              </html>
+            `);
+          }
+        } catch (error) {
+          console.error("Log display error:", error);
+          alert("ログの取得に失敗しました: " + error.message);
+        }
+      }
+
+      // 状態テキスト変換
+      function getStatusText(status) {
+        const statusMap = {
+          running: "🟢 実行中",
+          completed: "✅ 完了",
+          error: "❌ エラー",
+          stopped: "🛑 停止",
+          not_running: "⚫ 停止中",
+        };
+        return statusMap[status] || status;
+      }
+
+      // 状態ポーリング管理
+      let statusPollingInterval = null;
+
+      function startStatusPolling() {
+        if (statusPollingInterval) return;
+
+        statusPollingInterval = setInterval(() => {
+          if (rpaStatus.isRunning) {
+            refreshRpaStatus();
+          } else {
+            stopStatusPolling();
+          }
+        }, 5000); // 5秒間隔
+      }
+
+      function stopStatusPolling() {
+        if (statusPollingInterval) {
+          clearInterval(statusPollingInterval);
+          statusPollingInterval = null;
+        }
+      }
+
+      console.log("✅ Main App Firebase initialized");
+
+      // ===== SMS個別送信機能 =====
+
+      // テンプレート表示切り替え
+      function toggleTemplate() {
+        const checkbox = document.getElementById("useTemplate");
+        const selector = document.getElementById("templateSelector");
+        if (checkbox.checked) {
+          selector.style.display = "block";
+        } else {
+          selector.style.display = "none";
+        }
+      }
+
+      // テンプレート読み込み
+      async function loadTemplate(type) {
+        try {
+          const config = await window.FirebaseAPI.getUserConfig();
+          const textarea = document.getElementById("smsContent");
+
+          if (type === "A" && config.sms_config?.sms_text_a) {
+            textarea.value = config.sms_config.sms_text_a;
+          } else if (type === "B" && config.sms_config?.sms_text_b) {
+            textarea.value = config.sms_config.sms_text_b;
+          } else {
+            alert(
+              `テンプレート${type}が設定されていません。SMS設定で先に設定してください。`
+            );
+          }
+        } catch (error) {
+          console.error("テンプレート読み込みエラー:", error);
+          alert("テンプレートの読み込みに失敗しました: " + error.message);
+        }
+      }
+
+      // SMS個別送信
+      // ===== 服务器连接状态检查 =====
+      async function checkServerConnection() {
+        const statusDiv = document.getElementById("connectionStatus");
+        const statusText = document.getElementById("statusText");
+
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/health`, {
+            method: "GET",
+            timeout: 3000,
+          });
+
+          if (response.ok) {
+            statusDiv.style.backgroundColor = "#e8f5e8";
+            statusDiv.style.color = "#2e7d2e";
+            statusText.textContent = "✅ RPA服务器连接正常 (localhost:8888)";
+          } else {
+            throw new Error("Server response not OK");
+          }
+        } catch (error) {
+          statusDiv.style.backgroundColor = "#ffe6e6";
+          statusDiv.style.color = "#d32f2f";
+          statusText.innerHTML =
+            "❌ RPA服务器未连接 - <strong>请运行: 启动RPA网站.bat</strong>";
+        }
+      }
+
+      // ===== SMS送信功能 =====
+      async function sendIndividualSms(event) {
+        event.preventDefault();
+
+        const phone = document.getElementById("recipientPhone").value.trim();
+        const message = document.getElementById("smsContent").value.trim();
+        const resultDiv = document.getElementById("smsResult");
+
+        console.log("🔍 SMS送信開始:", {
+          phone,
+          messageLength: message.length,
+        });
+
+        if (!window.currentUser) {
+          resultDiv.innerHTML =
+            '<span style="color: #d32f2f;">❌ ユーザーがログインしていません</span>';
+          return;
+        }
+
+        try {
+          resultDiv.innerHTML =
+            '<span style="color: #1976d2;">📤 SMS送信中...</span>';
+
+          // SMS送信API呼び出し
+          const response = await fetch(`${API_BASE_URL}/api/sms/send`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userUid: window.currentUser.uid,
+              phone: phone,
+              message: message,
+            }),
+          });
+
+          const result = await response.json();
+          console.log("📊 SMS送信結果:", result);
+
+          if (result.success) {
+            resultDiv.innerHTML =
+              '<span style="color: #388e3c;">✅ SMS送信成功！</span>';
+
+            // 送信履歴に追加 - 包含状态码信息
+            const statusInfo = result.output
+              ? result.output.match(/STATUS: (\d+)/)?.[1] || "200"
+              : "200";
+            addToSmsHistory(phone, message, "success", `Status: ${statusInfo}`);
+
+            // フォームをクリア
+            document.getElementById("recipientPhone").value = "";
+            document.getElementById("smsContent").value = "";
+            document.getElementById("useTemplate").checked = false;
+            toggleTemplate();
+          } else {
+            resultDiv.innerHTML =
+              '<span style="color: #d32f2f;">❌ SMS送信失敗: ' +
+              result.error +
+              "</span>";
+
+            // 提取状态码信息
+            const statusInfo = result.details
+              ? result.details.match(/STATUS: (\d+)/)?.[1] || "Unknown"
+              : "Unknown";
+            addToSmsHistory(
+              phone,
+              message,
+              "failed",
+              `Status: ${statusInfo} - ${result.error}`
+            );
+          }
+        } catch (error) {
+          console.error("💥 SMS送信異常:", error);
+          resultDiv.innerHTML =
+            '<span style="color: #d32f2f;">❌ エラー: ' +
+            error.message +
+            "</span>";
+          addToSmsHistory(
+            phone,
+            message,
+            "error",
+            `Connection Error: ${error.message}`
+          );
+        }
+      }
+
+      // 送信履歴管理
+      let smsHistory = JSON.parse(localStorage.getItem("smsHistory") || "[]");
+
+      function addToSmsHistory(phone, message, status, statusInfo = null) {
+        const historyItem = {
+          timestamp: new Date().toLocaleString("ja-JP"),
+          phone: phone,
+          message:
+            message.substring(0, 50) + (message.length > 50 ? "..." : ""),
+          status: status,
+          statusInfo: statusInfo, // 新增状态码信息
+        };
+
+        smsHistory.unshift(historyItem); // 最新を上に
+        if (smsHistory.length > 100) {
+          // 最大100件保持
+          smsHistory = smsHistory.slice(0, 100);
+        }
+
+        localStorage.setItem("smsHistory", JSON.stringify(smsHistory));
+        updateSmsHistoryDisplay();
+      }
+
+      function updateSmsHistoryDisplay() {
+        const historyDiv = document.getElementById("smsHistory");
+        if (!historyDiv) return;
+
+        if (smsHistory.length === 0) {
+          historyDiv.innerHTML =
+            '<p style="color: #666; text-align: center;">送信履歴はここに表示されます</p>';
+          return;
+        }
+
+        const historyHtml = smsHistory
+          .map((item) => {
+            const statusIcon =
+              {
+                success: "✅",
+                failed: "❌",
+                error: "💥",
+              }[item.status] || "❓";
+
+            const statusColor =
+              {
+                success: "#388e3c",
+                failed: "#d32f2f",
+                error: "#ff9800",
+              }[item.status] || "#666";
+
+            return `
+            <div style="border-bottom: 1px solid #eee; padding: 8px 0; margin-bottom: 8px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-weight: bold;">${item.phone}</span>
+                <span style="color: ${statusColor};">${statusIcon} ${
+              item.status
+            }</span>
+              </div>
+              <div style="color: #666; font-size: 0.9em; margin-bottom: 4px;">
+                ${item.message}
+              </div>
+              <div style="color: #999; font-size: 0.8em;">
+                ${item.timestamp}
+                ${
+                  item.statusInfo
+                    ? '<br><span style="color: ' +
+                      (item.status === "success" ? "#388e3c" : "#d32f2f") +
+                      ';">' +
+                      item.statusInfo +
+                      "</span>"
+                    : ""
+                }
+                ${
+                  item.error && !item.statusInfo
+                    ? '<br><span style="color: #d32f2f;">エラー: ' +
+                      item.error +
+                      "</span>"
+                    : ""
+                }
+              </div>
+            </div>
+          `;
+          })
+          .join("");
+
+        historyDiv.innerHTML = historyHtml;
+      }
+
+      function clearSmsHistory() {
+        if (confirm("送信履歴をすべて削除しますか？")) {
+          smsHistory = [];
+          localStorage.removeItem("smsHistory");
+          updateSmsHistoryDisplay();
+        }
+      }
+
+      // ページ読み込み時に履歴を表示
+      document.addEventListener("DOMContentLoaded", function () {
+        setTimeout(() => {
+          updateSmsHistoryDisplay();
+          checkServerConnection(); // 检查服务器连接状态
+        }, 1000);
+
+        // 定期检查连接状态（每30秒）
+        setInterval(checkServerConnection, 30000);
+      });
+
+      // 调试函数：检查当前用户状态
+      window.checkUserStatus = function () {
+        console.log("=== 用户状态检查 ===");
+        console.log("🔍 window.currentUser:", window.currentUser);
+        console.log("🔍 auth.currentUser:", auth.currentUser);
+        console.log(
+          "🔍 UserEmail显示:",
+          document.getElementById("userEmail")?.textContent
+        );
+        if (window.currentUser) {
+          console.log("👤 当前用户详情:", {
+            email: window.currentUser.email,
+            uid: window.currentUser.uid,
+            emailVerified: window.currentUser.emailVerified,
+          });
+        }
+        console.log("==================");
+      };
+
+      // 页面加载后自动检查一次
+      setTimeout(() => {
+        window.checkUserStatus();
+      }, 2000);
+    </script>
+  </body>
+</html>
