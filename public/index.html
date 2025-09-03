@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SMS Publisher - 個人SMS送信システム</title>
+    <link rel="stylesheet" href="styles/main_app.css" />
+    <!-- Firebase v9 稳定版本 -->
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+      import {
+        getAuth,
+        onAuthStateChanged,
+        signOut,
+      } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+      import {
+        getFirestore,
+        doc,
+        getDoc,
+        setDoc,
+        updateDoc,
+      } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+      // Firebase 配置
+      const firebaseConfig = {
+        apiKey: "AIzaSyCYPji9NAg4T3z8JJERd_MniCbdteC9P2g",
+        authDomain: "rpa-sms-reclab.firebaseapp.com",
+        projectId: "rpa-sms-reclab",
+        storageBucket: "rpa-sms-reclab.firebasestorage.app",
+        messagingSenderId: "815415607045",
+        appId: "1:815415607045:web:e432022c62fbcb6899c16c",
+        measurementId: "G-53WG49PVJF",
+      };
+
+      // Firebase 初始化
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const db = getFirestore(app);
+
+      // 全局可用
+      window.auth = auth;
+      window.db = db;
+
+      // Firebase API 函数
+      window.FirebaseAPI = {
+        async logoutUser() {
+          try {
+            await signOut(auth);
+            return { success: true };
+          } catch (error) {
+            return { success: false, error: error.message };
+          }
+        },
+
+        // 获取用户配置
+        async getUserConfig() {
+          if (!window.currentUser) {
+            throw new Error("ログインが必要です");
+          }
+
+          try {
+            const userConfigDoc = await getDoc(
+              doc(db, "user_configs", window.currentUser.uid)
+            );
+            if (userConfigDoc.exists()) {
+              return userConfigDoc.data();
+            } else {
+              // 创建默认配置
+              const defaultConfig = {
+                user_id: window.currentUser.uid,
+                email: window.currentUser.email,
+                sms_config: {
+                  provider: "",
+                  api_url: "",
+                  api_id: "",
+                  api_password: "",
+                },
+                created_at: new Date(),
+                updated_at: new Date(),
+              };
+
+              await setDoc(
+                doc(db, "user_configs", window.currentUser.uid),
+                defaultConfig
+              );
+              return defaultConfig;
+            }
+          } catch (error) {
+            throw new Error("設定の取得に失敗しました: " + error.message);
+          }
+        },
+
+        // 更新SMS配置
+        async updateSmsConfig(smsConfig) {
+          if (!window.currentUser) {
+            throw new Error("ログインが必要です");
+          }
+
+          try {
+            await updateDoc(doc(db, "user_configs", window.currentUser.uid), {
+              sms_config: smsConfig,
+              updated_at: new Date(),
+            });
+            return { success: true };
+          } catch (error) {
+            throw new Error("SMS設定の更新に失敗しました: " + error.message);
+          }
+        },
+      };
+
+      // 认证状态监听
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          window.currentUser = user;
+          showMainApp();
+        } else {
+          window.currentUser = null;
+          showLoginPage();
+        }
+      });
+
+      function showLoginPage() {
+        window.location.href = "login.html";
+      }
+
+      function showMainApp() {
+        document.getElementById("userEmail").textContent =
+          window.currentUser.email;
+        loadUserConfig();
+      }
+
+      // 加载用户配置
+      async function loadUserConfig() {
+        try {
+          const config = await window.FirebaseAPI.getUserConfig();
+          if (config && config.sms_config) {
+            document.getElementById("apiUrl").value =
+              config.sms_config.api_url || "";
+            document.getElementById("apiId").value =
+              config.sms_config.api_id || "";
+            document.getElementById("apiPassword").value =
+              config.sms_config.api_password || "";
+          }
+        } catch (error) {
+          console.error("設定読み込みエラー:", error);
+          alert("設定の読み込みに失敗しました: " + error.message);
+        }
+      }
+
+      // 保存SMS配置
+      window.saveSmsConfig = async function () {
+        try {
+          const smsConfig = {
+            api_url: document.getElementById("apiUrl").value,
+            api_id: document.getElementById("apiId").value,
+            api_password: document.getElementById("apiPassword").value,
+          };
+
+          await window.FirebaseAPI.updateSmsConfig(smsConfig);
+          alert("SMS設定が保存されました！");
+        } catch (error) {
+          console.error("設定保存エラー:", error);
+          alert("設定の保存に失敗しました: " + error.message);
+        }
+      };
+
+      // 发送SMS
+      window.sendSMS = async function () {
+        const phone = document.getElementById("phoneNumber").value;
+        const message = document.getElementById("smsMessage").value;
+
+        if (!phone || !message) {
+          alert("電話番号とメッセージを入力してください");
+          return;
+        }
+
+        if (!window.currentUser) {
+          alert("ログインが必要です");
+          return;
+        }
+
+        try {
+          document.getElementById("sendButton").disabled = true;
+          document.getElementById("sendButton").textContent = "送信中...";
+
+          const response = await fetch("/api/sms/send", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userUid: window.currentUser.uid,
+              phone: phone,
+              message: message,
+            }),
+          });
+
+          const result = await response.json();
+
+          if (result.success) {
+            alert("SMS送信が完了しました！");
+            document.getElementById("phoneNumber").value = "";
+            document.getElementById("smsMessage").value = "";
+          } else {
+            alert("SMS送信に失敗しました: " + result.error);
+          }
+        } catch (error) {
+          console.error("SMS送信エラー:", error);
+          alert("SMS送信中にエラーが発生しました: " + error.message);
+        } finally {
+          document.getElementById("sendButton").disabled = false;
+          document.getElementById("sendButton").textContent = "SMS送信";
+        }
+      };
+
+      // 登出
+      window.logout = async function () {
+        try {
+          await window.FirebaseAPI.logoutUser();
+          window.location.href = "login.html";
+        } catch (error) {
+          console.error("ログアウトエラー:", error);
+          alert("ログアウトに失敗しました");
+        }
+      };
+    </script>
+  </head>
+  <body>
+    <div class="container">
+      <!-- 头部 -->
+      <header class="header">
+        <div class="header-content">
+          <h1 class="logo">
+            <span class="logo-icon">📱</span>
+            SMS Publisher
+          </h1>
+          <div class="user-info">
+            <span class="user-email" id="userEmail">user@example.com</span>
+            <button class="logout-btn" onclick="logout()">ログアウト</button>
+          </div>
+        </div>
+      </header>
+
+      <!-- 主要内容 -->
+      <main class="main-content">
+        <!-- SMS配置部分 -->
+        <section class="config-section">
+          <div class="card">
+            <div class="card-header">
+              <h2>SMS API 設定</h2>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label for="apiUrl">API URL:</label>
+                <input
+                  type="text"
+                  id="apiUrl"
+                  placeholder="SMS API URL を入力"
+                />
+              </div>
+              <div class="form-group">
+                <label for="apiId">API ID:</label>
+                <input type="text" id="apiId" placeholder="API ID を入力" />
+              </div>
+              <div class="form-group">
+                <label for="apiPassword">API Password:</label>
+                <input
+                  type="password"
+                  id="apiPassword"
+                  placeholder="API パスワードを入力"
+                />
+              </div>
+              <button class="save-btn" onclick="saveSmsConfig()">
+                設定を保存
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- SMS发送部分 -->
+        <section class="sms-section">
+          <div class="card">
+            <div class="card-header">
+              <h2>個人SMS送信</h2>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label for="phoneNumber">電話番号:</label>
+                <input
+                  type="tel"
+                  id="phoneNumber"
+                  placeholder="電話番号を入力 (例: 09012345678)"
+                />
+              </div>
+              <div class="form-group">
+                <label for="smsMessage">メッセージ:</label>
+                <textarea
+                  id="smsMessage"
+                  rows="4"
+                  placeholder="送信するメッセージを入力"
+                ></textarea>
+              </div>
+              <button class="send-btn" id="sendButton" onclick="sendSMS()">
+                SMS送信
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

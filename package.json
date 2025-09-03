@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "SMS Publisher - Personal SMS Sending System",
   "scripts": {
-    "build": "echo 'Build completed'"
+    "build": "node -e \"const fs=require('fs'); if(!fs.existsSync('public')) fs.mkdirSync('public'); if(!fs.existsSync('public/styles')) fs.mkdirSync('public/styles'); if(fs.existsSync('src/frontend/main_app.html')) fs.copyFileSync('src/frontend/main_app.html', 'public/index.html'); console.log('Build completed - static files ready');\""
   },
   "keywords": [
     "sms",
