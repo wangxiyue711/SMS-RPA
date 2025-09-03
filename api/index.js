@@ -1,5 +1,5 @@
-// Vercel 无服务器函数格式，正确返回字符串
-export default function handler(req, res) {
+// Vercel 无服务器函数格式，使用 CommonJS
+module.exports = function handler(req, res) {
   // 设置响应头
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Access-Control-Allow-Credentials", true);
@@ -99,4 +99,4 @@ export default function handler(req, res) {
     };
     res.status(500).end(JSON.stringify(errorResponse));
   }
-}
+};

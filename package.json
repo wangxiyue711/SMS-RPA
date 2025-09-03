@@ -2,10 +2,8 @@
   "name": "sms-publisher",
   "version": "1.0.0",
   "description": "SMS Publisher - Personal SMS Sending System",
-  "type": "module",
   "scripts": {
-    "build": "echo 'Build completed'",
-    "vercel-build": "echo 'Vercel build completed'"
+    "build": "echo 'Build completed'"
   },
   "keywords": [
     "sms",
@@ -15,8 +13,5 @@
     "firebase"
   ],
   "author": "xwang",
-  "license": "ISC",
-  "engines": {
-    "node": ">=18.0.0"
-  }
+  "license": "ISC"
 }

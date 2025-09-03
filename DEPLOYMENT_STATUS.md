@@ -1,6 +1,7 @@
 ## SMS Publisher - Vercel 部署检查清单
 
 ✅ **项目文件结构**
+
 ```
 SMS PUBLISHER/
 ├── package.json          (✅ 已配置为 Vercel 兼容)
@@ -15,16 +16,19 @@ SMS PUBLISHER/
 ```
 
 ✅ **核心功能**
+
 - Firebase 认证系统
-- 个人SMS发送功能
+- 个人 SMS 发送功能
 - 用户配置管理
 - Vercel 无服务器 API
 
 ✅ **API 端点**
+
 - `/api/health` - 健康检查
-- `/api/sms/send` - 发送SMS
+- `/api/sms/send` - 发送 SMS
 
 ✅ **前端页面**
+
 - `/` - 主应用 (index.html)
 - `/login.html` - 登录页面
 
@@ -32,7 +36,7 @@ SMS PUBLISHER/
 
 1. 项目已经配置为 Vercel 兼容
 2. 使用 Firebase 作为认证和配置存储
-3. 个人SMS发送功能已简化并优化
+3. 个人 SMS 发送功能已简化并优化
 4. 无需复杂的 RPA 服务器，直接使用 Vercel 函数
 
 ## 📋 验证项目可部署性
