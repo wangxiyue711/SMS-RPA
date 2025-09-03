@@ -812,7 +812,9 @@
 
     <script>
       // API 配置
-      const API_BASE_URL = "http://localhost:8888";
+      const API_BASE_URL = window.location.hostname === 'localhost' 
+  ? "http://localhost:8888" 
+  : `https://${window.location.hostname}`;
 
       // 左侧菜单切换逻辑
       document.addEventListener("DOMContentLoaded", function () {
