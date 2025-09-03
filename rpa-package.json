@@ -1,0 +1,20 @@
+{
+  "name": "sms-publisher-rpa",
+  "version": "1.0.0",
+  "description": "SMS Publisher RPA Server",
+  "main": "src/backend/rpa_server.js",
+  "scripts": {
+    "start": "node src/backend/rpa_server.js",
+    "dev": "node src/backend/rpa_server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "keywords": ["sms", "rpa", "express", "server"],
+  "author": "xwang",
+  "license": "ISC",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

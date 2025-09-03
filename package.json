@@ -1,32 +1,22 @@
 {
-  "name": "sms-publisher-rpa-server",
+  "name": "sms-publisher",
   "version": "1.0.0",
-  "description": "RPA Server for SMS Publisher - Firebase Edition",
-  "main": "src/backend/rpa_server.js",
+  "description": "SMS Publisher - Personal SMS Sending System",
+  "type": "module",
   "scripts": {
-    "start": "node src/backend/rpa_server.js",
-    "dev": "nodemon src/backend/rpa_server.js",
     "build": "echo 'Build completed'",
-    "vercel-build": "npm install",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "vercel-build": "echo 'Vercel build completed'"
   },
   "keywords": [
-    "rpa",
     "sms",
-    "automation",
-    "firebase",
-    "express"
+    "api",
+    "serverless",
+    "vercel",
+    "firebase"
   ],
-  "author": "SMS Publisher Team",
+  "author": "xwang",
   "license": "ISC",
-  "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.1"
-  },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=18.0.0"
   }
 }

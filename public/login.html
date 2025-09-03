@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SMS PUBLISHER - ログイン</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", "Arial", sans-serif;
+        background: #f8faef;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      .login-container {
+        background: white;
+        padding: 3rem;
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(111, 131, 51, 0.1);
+        width: 100%;
+        max-width: 400px;
+        border: 1px solid rgba(111, 131, 51, 0.1);
+      }
+
+      .logo {
+        text-align: center;
+        margin-bottom: 2.5rem;
+      }
+
+      .logo-icon {
+        width: 64px;
+        height: 64px;
+        background: linear-gradient(135deg, #6f8333 0%, #8fa446 100%);
+        border-radius: 12px;
+        margin: 0 auto 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .logo-icon::before {
+        content: "📱";
+        color: white;
+        font-size: 32px;
+      }
+
+      .logo h1 {
+        color: #6f8333;
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        letter-spacing: 1px;
+      }
+
+      .logo p {
+        color: #666;
+        font-size: 0.9rem;
+      }
+
+      .form-group {
+        margin-bottom: 1.5rem;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 0.5rem;
+        color: #6f8333;
+        font-weight: 500;
+        font-size: 0.9rem;
+      }
+
+      input[type="email"],
+      input[type="password"] {
+        width: 100%;
+        padding: 0.875rem;
+        border: 2px solid #e8eae0;
+        border-radius: 8px;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        background: #fafbf7;
+        color: #6f8333;
+      }
+
+      input[type="email"]:focus,
+      input[type="password"]:focus {
+        outline: none;
+        border-color: #6f8333;
+        background: white;
+        box-shadow: 0 0 0 3px rgba(111, 131, 51, 0.1);
+      }
+
+      .login-btn {
+        width: 100%;
+        padding: 1rem;
+        background: linear-gradient(135deg, #6f8333 0%, #8fa446 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px rgba(111, 131, 51, 0.3);
+      }
+
+      .login-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(111, 131, 51, 0.4);
+      }
+
+      .login-btn:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: 0 4px 12px rgba(111, 131, 51, 0.2);
+      }
+
+      .error-message {
+        color: #e74c3c;
+        margin-top: 1rem;
+        text-align: center;
+        font-size: 0.9rem;
+      }
+
+      .loading {
+        display: none;
+        text-align: center;
+        margin-top: 1rem;
+      }
+
+      .loading.show {
+        display: block;
+      }
+    </style>
+    <!-- Firebase v9 稳定版本 -->
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+      import {
+        getAuth,
+        signInWithEmailAndPassword,
+        createUserWithEmailAndPassword,
+        signOut,
+      } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+
+      // Firebase 配置
+      const firebaseConfig = {
+        apiKey: "AIzaSyCYPji9NAg4T3z8JJERd_MniCbdteC9P2g",
+        authDomain: "rpa-sms-reclab.firebaseapp.com",
+        projectId: "rpa-sms-reclab",
+        storageBucket: "rpa-sms-reclab.firebasestorage.app",
+        messagingSenderId: "815415607045",
+        appId: "1:815415607045:web:e432022c62fbcb6899c16c",
+        measurementId: "G-53WG49PVJF",
+      };
+
+      // Firebase 初始化
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+
+      // 全局可用
+      window.auth = auth;
+
+      // Firebase API
+      window.FirebaseAPI = {
+        async loginUser(email, password) {
+          try {
+            console.log("🔥 开始登录流程:", { email });
+
+            // 尝试登录
+            const userCredential = await signInWithEmailAndPassword(
+              auth,
+              email,
+              password
+            );
+            const user = userCredential.user;
+
+            console.log("✅ Firebase认证成功:", user.uid);
+
+            return {
+              success: true,
+              user: user,
+              userData: {
+                email: user.email,
+                uid: user.uid,
+                role: "user",
+              },
+            };
+          } catch (error) {
+            console.error("❌ 登录失败:", error);
+
+            // 如果是用户不存在，尝试注册
+            if (error.code === "auth/user-not-found") {
+              console.log("📝 用户不存在，尝试注册新用户");
+              try {
+                const userCredential = await createUserWithEmailAndPassword(
+                  auth,
+                  email,
+                  password
+                );
+                const user = userCredential.user;
+
+                console.log("✅ 新用户注册成功:", user.uid);
+
+                return {
+                  success: true,
+                  user: user,
+                  userData: {
+                    email: user.email,
+                    uid: user.uid,
+                    role: "user",
+                  },
+                };
+              } catch (registerError) {
+                console.error("❌ 注册失败:", registerError);
+                return {
+                  success: false,
+                  error: `注册失败: ${registerError.message}`,
+                };
+              }
+            }
+
+            return {
+              success: false,
+              error: `登录失败: ${error.message}`,
+            };
+          }
+        },
+
+        async logoutUser() {
+          try {
+            await signOut(auth);
+            return { success: true };
+          } catch (error) {
+            return { success: false, error: error.message };
+          }
+        },
+      };
+
+      console.log("✅ Firebase API Manager loaded successfully");
+    </script>
+  </head>
+  <body>
+    <div class="login-container">
+      <div class="logo">
+        <div class="logo-icon"></div>
+        <h1>SMS Publisher</h1>
+        <p>短信发送管理系统</p>
+      </div>
+
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="email">邮箱地址</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            placeholder="your@email.com"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="password">密码</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            placeholder="请输入密码"
+            required
+          />
+        </div>
+
+        <button type="submit" class="login-btn" id="loginBtn">登录</button>
+
+        <div class="loading" id="loading">登录中...</div>
+
+        <div class="error-message" id="errorMessage"></div>
+      </form>
+    </div>
+
+    <script>
+      async function handleLogin(event) {
+        event.preventDefault();
+
+        const email = document.getElementById("email").value;
+        const password = document.getElementById("password").value;
+        const loginBtn = document.getElementById("loginBtn");
+        const loading = document.getElementById("loading");
+        const errorMessage = document.getElementById("errorMessage");
+
+        console.log("🚀 登录尝试:", { email });
+
+        // UI状态更新
+        loginBtn.disabled = true;
+        loading.classList.add("show");
+        errorMessage.textContent = "";
+
+        try {
+          if (!window.FirebaseAPI) {
+            throw new Error("系统初始化中，请刷新页面重试");
+          }
+
+          console.log("📞 调用 FirebaseAPI.loginUser...");
+          const result = await window.FirebaseAPI.loginUser(email, password);
+          console.log("📊 登录结果:", result);
+
+          if (result.success) {
+            console.log("✅ 登录成功，准备跳转...");
+
+            errorMessage.style.color = "#155724";
+            errorMessage.style.background = "#d4edda";
+            errorMessage.style.border = "1px solid #c3e6cb";
+            errorMessage.style.padding = "0.75rem";
+            errorMessage.style.borderRadius = "6px";
+            errorMessage.textContent = "✅ 登录成功！正在进入主页...";
+
+            setTimeout(() => {
+              window.location.href = "index.html";
+            }, 1500);
+          } else {
+            console.error("❌ 登录失败:", result.error);
+            errorMessage.textContent = result.error || "登录失败";
+          }
+        } catch (error) {
+          console.error("💥 登录异常:", error);
+          errorMessage.textContent = "错误: " + error.message;
+        } finally {
+          loginBtn.disabled = false;
+          loading.classList.remove("show");
+        }
+      }
+
+      // 页面加载检查
+      window.addEventListener("load", async () => {
+        console.log("📄 页面加载完成");
+
+        // 等待Firebase初始化
+        let retries = 0;
+        while ((!window.auth || !window.FirebaseAPI) && retries < 10) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          retries++;
+        }
+
+        // 清除之前的登录状态
+        try {
+          if (window.auth && window.auth.currentUser) {
+            console.log("🔓 清除之前的登录状态...");
+            await window.FirebaseAPI.logoutUser();
+          }
+        } catch (error) {
+          console.log("⚠️ 清除登录状态时出错:", error);
+        }
+
+        console.log("✅ 登录页面准备就绪");
+      });
+    </script>
+  </body>
+</html>

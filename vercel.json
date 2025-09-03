@@ -6,7 +6,7 @@
       "use": "@vercel/node"
     },
     {
-      "src": "src/frontend/**",
+      "src": "public/**",
       "use": "@vercel/static"
     }
   ],
@@ -17,31 +17,23 @@
     },
     {
       "src": "/",
-      "dest": "/src/frontend/main_app.html"
+      "dest": "/public/index.html"
     },
     {
       "src": "/index.html",
-      "dest": "/src/frontend/main_app.html"
-    },
-    {
-      "src": "/main_app.html",
-      "dest": "/src/frontend/main_app.html"
+      "dest": "/public/index.html"
     },
     {
       "src": "/login.html",
-      "dest": "/src/frontend/login.html"
+      "dest": "/public/login.html"
     },
     {
       "src": "/styles/(.*)",
-      "dest": "/src/frontend/styles/$1"
+      "dest": "/public/styles/$1"
     },
     {
       "src": "/(.*\\.(css|js|png|jpg|jpeg|gif|ico|svg))",
-      "dest": "/src/frontend/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/src/frontend/$1"
+      "dest": "/public/$1"
     }
   ],
   "functions": {
