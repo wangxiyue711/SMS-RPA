@@ -421,7 +421,7 @@ body {
   font-size: 1rem;
 }
 
-/* SMS发送历史 */
+/* SMS送信履歴 */
 .sms-history {
   max-height: 400px;
   overflow-y: auto;
@@ -820,7 +820,7 @@ body {
   font-size: 14px;
 }
 
-/* SMS发送历史 */
+/* SMS送信履歴 */
 .sms-history {
   max-height: 400px;
   overflow-y: auto;

@@ -13,28 +13,70 @@ import base64
 import time
 import requests
 
-# 安全的print函数，避免编码错误
+# Windows编码设置
+import locale
+try:
+    # 尝试设置UTF-8编码
+    if sys.platform.startswith('win'):
+        # 设置环境变量 - 这是最安全的方法
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
+        # 不使用chcp命令，因为在Node.js子进程中可能失败
+except Exception as e:
+    # 如果设置失败，继续执行，但可能会有编码问题
+    pass
+
+# 安全的print函数，支持日语字符 - 针对Windows优化
 def safe_print(message):
     try:
-        print(message)
-        sys.stdout.flush()
-    except (UnicodeEncodeError, UnicodeError):
-        # 如果遇到编码错误，使用ASCII编码
+        # 尝试直接输出
+        print(str(message))
+        # 在Node.js子进程中，flush可能会有问题，所以加try-catch
         try:
-            ascii_message = str(message).encode('ascii', 'ignore').decode('ascii')
-            print(ascii_message)
             sys.stdout.flush()
         except:
-            print("MESSAGE_ENCODING_ERROR")
-            sys.stdout.flush()
+            pass
+    except UnicodeEncodeError:
+        try:
+            # 如果有编码问题，尝试用UTF-8编码
+            encoded_msg = str(message).encode('utf-8', errors='replace').decode('utf-8')
+            print(encoded_msg)
+            try:
+                sys.stdout.flush()
+            except:
+                pass
+        except:
+            # 最后的备选方案：输出无日语的简化版本
+            try:
+                # 尝试只保留ASCII字符和数字
+                ascii_msg = ''.join(char if ord(char) < 128 else '?' for char in str(message))
+                print(f"[INFO] {ascii_msg}")
+                try:
+                    sys.stdout.flush()
+                except:
+                    pass
+            except:
+                print("[MESSAGE_ENCODING_HANDLED]")
+                try:
+                    sys.stdout.flush()
+                except:
+                    pass
+    except Exception as e:
+        try:
+            print(f"[PRINT_ERROR] {type(e).__name__}")
+            try:
+                sys.stdout.flush()
+            except:
+                pass
+        except:
+            pass
 
 # Firebase Admin SDK
 try:
     import firebase_admin
     from firebase_admin import credentials, firestore
-    safe_print("✅ Firebase Admin SDK imported successfully")
+    safe_print("Firebase Admin SDK imported successfully")
 except ImportError:
-    safe_print("❌ Firebase Admin SDK not installed. Run: pip install firebase-admin")
+    safe_print("Firebase Admin SDK not installed. Run: pip install firebase-admin")
     sys.exit(1)
 
 # ====== Firebase配置 ======
@@ -49,27 +91,40 @@ class FirebaseConfig:
         try:
             # 初始化Firebase Admin（使用服务账户密钥）
             if not firebase_admin._apps:
-                # 尝试多个可能的密钥路径
+                # 尝试多个可能的密钥路径 - 现在工作目录是项目根目录
                 key_paths = [
+                    # 从项目根目录出发的路径（Node.js现在设置的工作目录）
+                    os.path.join("config", "firebase", "firebase-service-account.json"),
+                    # 从脚本文件位置出发的路径（终端直接运行时）
                     os.path.join(os.path.dirname(__file__), "../../config/firebase/firebase-service-account.json"),
-                    "firebase-service-account.json",
-                    os.path.join("config", "firebase", "firebase-service-account.json")
+                    # 绝对路径备用
+                    os.path.abspath("config/firebase/firebase-service-account.json"),
+                    # 直接文件名（如果在同目录）
+                    "firebase-service-account.json"
                 ]
                 
+                safe_print("Firebase key file check:")
                 cred = None
                 for key_path in key_paths:
-                    if os.path.exists(key_path):
-                        cred = credentials.Certificate(key_path)
-                        safe_print(f"✅ Found Firebase key at: {key_path}")
-                        break
+                    abs_path = os.path.abspath(key_path)
+                    exists = os.path.exists(key_path)
+                    safe_print(f"Trying path: {abs_path} - Exists: {exists}")
+                    if exists:
+                        try:
+                            cred = credentials.Certificate(key_path)
+                            safe_print(f"Firebase key loaded successfully: {key_path}")
+                            break
+                        except Exception as e:
+                            safe_print(f"Firebase key load failed: {e}")
+                            continue
                 
                 if cred:
                     firebase_admin.initialize_app(cred)
-                    safe_print("✅ Firebase Admin initialized with service account")
+                    safe_print("Firebase Admin initialized with service account")
                 else:
                     # 如果没有服务账户密钥，使用环境变量或跳过Firebase Admin初始化
-                    safe_print("⚠️ No Firebase service account key found")
-                    safe_print("⚠️ Trying alternative configuration method...")
+                    safe_print("No Firebase service account key found")
+                    safe_print("Trying alternative configuration method...")
                     
                     # 尝试直接返回配置而不使用Firebase Admin
                     return self.get_config_from_environment(user_uid)
@@ -83,24 +138,24 @@ class FirebaseConfig:
             
             if doc.exists:
                 self.user_config = doc.to_dict()
-                safe_print(f"✅ 用户配置获取成功: {user_uid}")
+                safe_print(f"User config retrieved successfully: {user_uid}")
                 return True
             else:
-                safe_print(f"❌ 用户配置不存在: {user_uid}")
+                safe_print(f"User config not found: {user_uid}")
                 return False
                 
         except Exception as e:
-            safe_print(f"❌ Firebase初始化失败: {e}")
+            safe_print(f"Firebase initialization failed: {e}")
             return False
     
     def get_config_from_environment(self, user_uid: str):
         """从环境变量获取配置（当Firebase服务账户密钥不可用时）"""
         try:
-            safe_print("🔧 Using fallback configuration method")
+            safe_print("Using fallback configuration method")
             
-            # 模拟用户配置结构
+            # 模拟用户配置结构 - 使用sms_config字段匹配HTML结构
             self.user_config = {
-                'sms': {
+                'sms_config': {
                     'api_url': os.getenv('SMS_API_URL', 'https://www.sms-console.jp/api/'),
                     'api_id': os.getenv('SMS_API_ID', ''),
                     'api_password': os.getenv('SMS_API_PASSWORD', '')
@@ -108,25 +163,36 @@ class FirebaseConfig:
             }
             
             # 检查配置是否完整
-            sms_config = self.user_config.get('sms', {})
+            sms_config = self.user_config.get('sms_config', {})
             if not sms_config.get('api_id') or not sms_config.get('api_password'):
-                safe_print("❌ SMS配置不完整，请设置环境变量:")
-                safe_print("   SMS_API_ID=您的API_ID")
-                safe_print("   SMS_API_PASSWORD=您的API密码")
+                safe_print("SMS config incomplete, please set environment variables:")
+                safe_print("   SMS_API_ID=your_api_id")
+                safe_print("   SMS_API_PASSWORD=your_api_password")
                 return False
             
-            safe_print(f"✅ 环境变量配置获取成功: {user_uid}")
+            safe_print(f"Environment config retrieved successfully: {user_uid}")
             return True
             
         except Exception as e:
-            safe_print(f"❌ 环境变量配置获取失败: {e}")
+            safe_print(f"Environment config retrieval failed: {e}")
             return False
     
     def get_sms_config(self):
-        """获取SMS配置"""
+        """获取SMS配置 - 修正字段名匹配HTML保存的结构"""
         if not self.user_config:
+            safe_print("User config is empty")
             return {}
-        return self.user_config.get('sms', {})
+        
+        # 调试：显示用户配置的所有字段
+        safe_print(f"User config fields: {list(self.user_config.keys())}")
+        
+        # HTML保存的是sms_config，不是sms
+        sms_config = self.user_config.get('sms_config', {})
+        
+        # 调试：打印SMS配置内容
+        safe_print(f"SMS config content: {sms_config}")
+        
+        return sms_config
 
 # 全局Firebase配置实例
 firebase_config = FirebaseConfig()
@@ -166,7 +232,7 @@ def post_once(api_url: str, api_id: str, api_password: str, mobilenumber: str, s
     text = (smstext or "").replace("&", "＆")
     headers = {
         "Authorization": build_basic_auth(api_id, api_password),
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "User-Agent": "python-requests/2.x",
         "Connection": "close",
     }
@@ -175,9 +241,10 @@ def post_once(api_url: str, api_id: str, api_password: str, mobilenumber: str, s
         data["status"] = "1"
         data["smsid"] = gen_alnum_smsid()
     
-    safe_print(f"📡 Sending SMS API request to: {api_url}")
-    safe_print(f"📱 Target phone: {mobilenumber}")
-    safe_print(f"📝 Message length: {len(text)} chars")
+    safe_print(f"Sending SMS API request to: {api_url}")
+    safe_print(f"Target phone: {mobilenumber}")
+    safe_print(f"Message: {text}")
+    safe_print(f"Message length: {len(text)} chars")
     
     r = requests.post(api_url, headers=headers, data=data, timeout=TIMEOUT)
     
@@ -272,9 +339,63 @@ def post_once(api_url: str, api_id: str, api_password: str, mobilenumber: str, s
     safe_print(f"STATUS: {r.status_code} ({msg}) | SENT mobilenumber: {mobilenumber}")
     safe_print(f"RESPONSE: {r.text[:500]}")
     
+    # 详细分析SMS API响应
+    response_text = r.text.strip()
+    safe_print(f"Detailed response analysis:")
+    safe_print(f"   Status code: {r.status_code}")
+    safe_print(f"   Response length: {len(response_text)} chars")
+    safe_print(f"   Response content: '{response_text}'")
+    
+    # 检查常见的限制问题
+    if r.status_code == 402:
+        safe_print("Send limit error: SMS account quota exhausted or send limit reached")
+        safe_print("   Suggestion: Check SMS account balance, purchase more quota")
+    elif r.status_code == 405:
+        safe_print("Method not allowed: Possibly too frequent sending or account restricted")
+        safe_print("   Suggestion: Wait 1 hour and retry, control sending frequency")
+    elif r.status_code == 503:
+        safe_print("Service temporarily unavailable: Possible temporary throttling")
+        safe_print("   Suggestion: Wait 10-30 minutes and retry")
+    elif r.status_code == 555:
+        safe_print("IP banned: Too frequent sending, IP temporarily banned")
+        safe_print("   Suggestion: Wait 1-2 hours and retry, or contact service provider")
+    elif r.status_code == 585:
+        safe_print("Invalid SMS content: Content filtered or contains prohibited words")
+        safe_print("   Suggestion: Change SMS content, avoid test words")
+    elif r.status_code == 592:
+        safe_print("Exceeded send permission: Invalid time or exceeded send permission")
+        safe_print("   Suggestion: Check account permission settings")
+    elif r.status_code == 606:
+        safe_print("API disabled: SMS API functionality disabled")
+        safe_print("   Suggestion: Contact SMS service provider to reactivate API")
+    elif r.status_code == 624:
+        safe_print("Duplicate SMS ID: Possibly duplicate sending of same content")
+        safe_print("   Suggestion: Change SMS content or wait and retry")
+    elif r.status_code == 666:
+        safe_print("About to be IP banned: 9 authentication errors, about to be banned")
+        safe_print("   Suggestion: Stop sending immediately, check API key")
+    elif r.status_code in [575, 576, 577, 578]:
+        safe_print(f"Carrier restriction: {code_map.get(r.status_code, 'carrier related error')}")
+        safe_print("   Suggestion: Check carrier support for target phone number")
+    
+    # 检查是否为真正的成功响应
+    if r.status_code == 200:
+        if response_text == "200":
+            safe_print("Notice: API returned simple '200'")
+            safe_print("   This may indicate:")
+            safe_print("   1. Request accepted but quota exhausted")
+            safe_print("   2. Content filtered (like test content)")
+            safe_print("   3. Number in blacklist")
+            safe_print("   4. Send frequency limit reached")
+        elif "success" in response_text.lower() or "ok" in response_text.lower():
+            safe_print("API response indicates successful sending")
+        else:
+            safe_print("API response unclear, suggest checking service provider account status")
+    
+    
     # 响应内容判断
     if r.status_code != 200 or ("error" in r.text.lower() or "fail" in r.text.lower()):
-        safe_print("⚠️ API响应异常，内容如下：")
+        safe_print("API response abnormal, content as follows:")
         safe_print(r.text)
     
     return r
@@ -292,15 +413,15 @@ def send_sms(api_url: str, api_id: str, api_password: str, phone: str, text: str
     elif raw.startswith("0") and len(raw) == 11:
         local_num = raw
     else:
-        raise ValueError(f"手机号不符合日本本地格式：{phone}（清洗后：{raw}）")
+        raise ValueError(f"Phone number format error: {phone} (cleaned: {raw})")
     
-    safe_print(f"发送本地格式手机号：{local_num}")
+    safe_print(f"Sending to local format phone: {local_num}")
     r = post_once(api_url, api_id, api_password, local_num, text, use_report)
     
     if r.status_code == 560:
         # 兜底再试81格式
         alt = "81" + local_num[1:]
-        safe_print(f"⚠️ 收到 560，改用 81 形式再试：{alt}")
+        safe_print(f"Received 560, trying 81 format: {alt}")
         r = post_once(api_url, api_id, api_password, alt, text, use_report)
     
     return r
@@ -312,96 +433,131 @@ class PersonalSMSSender:
     def get_user_config_from_firebase(self, user_uid):
         """从Firebase获取用户配置"""
         try:
+            safe_print(f"Starting to get user config: {user_uid}")
+            
             # 初始化Firebase配置
             if not firebase_config.initialize_firebase(user_uid):
-                safe_print("❌ Firebase初始化失败")
+                safe_print("Firebase initialization failed")
                 return None
             
             # 获取SMS配置
             sms_config = firebase_config.get_sms_config()
             
             if not sms_config:
-                safe_print("❌ 用户SMS配置为空")
+                safe_print("User SMS config is empty")
                 return None
+            
+            # 调试：显示获取到的配置
+            safe_print(f"Retrieved SMS config fields: {list(sms_config.keys())}")
             
             # 验证必要的配置项
             required_fields = ['api_url', 'api_id', 'api_password']
             missing_fields = [field for field in required_fields if not sms_config.get(field)]
             
             if missing_fields:
-                safe_print(f"❌ SMS配置不完整，缺少: {missing_fields}")
+                safe_print(f"SMS config incomplete, missing: {missing_fields}")
+                safe_print(f"Current config: {sms_config}")
                 return None
             
-            config = {
-                'sms': sms_config
-            }
-            
-            safe_print("✅ 从Firebase获取SMS配置成功")
-            return config
+            # 直接返回sms_config，保持字段一致性
+            safe_print("SMS config retrieved from Firebase successfully")
+            safe_print(f"API URL: {sms_config.get('api_url', 'N/A')}")
+            safe_print(f"API ID: {sms_config.get('api_id', 'N/A')}")
+            return sms_config
             
         except Exception as e:
-            safe_print(f"❌ 获取Firebase配置失败: {e}")
+            safe_print(f"Failed to get Firebase config: {e}")
+            import traceback
+            safe_print(f"Detailed error: {traceback.format_exc()}")
             return None
     
     def send_personal_sms(self, config, phone, message):
         """发送个人SMS"""
         try:
-            sms_config = config.get('sms', {})
-            api_url = sms_config.get('api_url', '')
-            api_id = sms_config.get('api_id', '')
-            api_password = sms_config.get('api_password', '')
+            # 现在config直接就是sms_config
+            api_url = config.get('api_url', '')
+            api_id = config.get('api_id', '')
+            api_password = config.get('api_password', '')
+            
+            safe_print(f"Using config to send SMS:")
+            safe_print(f"   API URL: {api_url}")
+            safe_print(f"   API ID: {api_id}")
+            safe_print(f"   Phone: {phone}")
+            safe_print(f"   Message: {message}")
             
             if not all([api_url, api_id, api_password]):
-                return False, "SMS配置不完整"
+                return False, "SMS config incomplete"
             
             # 使用send_sms_once.py的发送逻辑
             response = send_sms(api_url, api_id, api_password, phone, message, USE_DELIVERY_REPORT)
             
             if response.status_code == 200:
-                return True, f"SMS发送成功: {response.text}"
+                return True, f"SMS sent successfully: {response.text}"
             else:
-                return False, f"SMS发送失败: HTTP {response.status_code} - {response.text}"
+                return False, f"SMS send failed: HTTP {response.status_code} - {response.text}"
                 
         except Exception as e:
-            return False, f"SMS发送异常: {str(e)}"
+            safe_print(f"SMS send exception details: {str(e)}")
+            import traceback
+            safe_print(f"Exception stack: {traceback.format_exc()}")
+            return False, f"SMS send exception: {str(e)}"
 
 def main():
     try:
+        safe_print("SCRIPT_START: Starting send_personal_sms.py")
+        safe_print(f"SCRIPT_CWD: Current working directory: {os.getcwd()}")
+        safe_print(f"SCRIPT_FILE: Script file location: {__file__}")
+        safe_print(f"SCRIPT_ENV: PYTHONIOENCODING = {os.getenv('PYTHONIOENCODING', 'NOT_SET')}")
+        
         # 从标准输入读取JSON数据
         input_line = sys.stdin.readline().strip()
         if not input_line:
             safe_print("ERROR: No input data received")
             sys.exit(1)
             
+        safe_print(f"SCRIPT_INPUT: Received input data: {input_line}")
+        
         data = json.loads(input_line)
         
         user_uid = data.get('userUid')
         phone = data.get('phone')
         message = data.get('message')
         
+        safe_print(f"Received parameters:")
+        safe_print(f"   User UID: {user_uid}")
+        safe_print(f"   Phone: {phone}")
+        safe_print(f"   Message: {message}")
+        
         if not all([user_uid, phone, message]):
             safe_print("ERROR: Missing required parameters (userUid, phone, message)")
+            safe_print(f"Parameter check: userUid={bool(user_uid)}, phone={bool(phone)}, message={bool(message)}")
             sys.exit(1)
         
         safe_print(f"Starting SMS send to: {phone}")
+        safe_print(f"Message content: {message}")
         
         # 初始化个人SMS发送器
+        safe_print("SCRIPT_INIT: Creating PersonalSMSSender")
         sender = PersonalSMSSender()
         
         # 获取用户配置
+        safe_print("SCRIPT_CONFIG: Getting user config from Firebase")
         config = sender.get_user_config_from_firebase(user_uid)
         if not config:
             safe_print("ERROR: Failed to get SMS config")
             sys.exit(1)
         
         # 发送SMS
+        safe_print("SCRIPT_SEND: Sending SMS")
         success, result_message = sender.send_personal_sms(config, phone, message)
         
         if success:
             safe_print(f"SUCCESS: {result_message}")
+            safe_print("SCRIPT_EXIT_SUCCESS")  # 明确的成功标识
             sys.exit(0)
         else:
             safe_print(f"ERROR: {result_message}")
+            safe_print("SCRIPT_EXIT_FAILURE")  # 明确的失败标识
             sys.exit(1)
             
     except json.JSONDecodeError as e:

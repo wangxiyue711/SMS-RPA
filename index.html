@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SMS Publisher</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Arial", sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .container {
+        text-align: center;
+        background: white;
+        padding: 40px;
+        border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        max-width: 500px;
+      }
+      h1 {
+        color: #333;
+        margin-bottom: 20px;
+        font-size: 2.5em;
+      }
+      .emoji {
+        font-size: 4em;
+        margin-bottom: 20px;
+      }
+      .btn {
+        display: inline-block;
+        padding: 15px 30px;
+        margin: 10px;
+        background: #6f8333;
+        color: white;
+        text-decoration: none;
+        border-radius: 10px;
+        font-size: 1.2em;
+        transition: background 0.3s;
+      }
+      .btn:hover {
+        background: #5a6b2a;
+      }
+      .description {
+        color: #666;
+        margin-bottom: 30px;
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="emoji">📱</div>
+      <h1>SMS Publisher</h1>
+      <p class="description">
+        Firebase連携SMS送信システム<br />
+        個人SMS送信とRPA自動化機能を提供
+      </p>
+      <a href="/src/frontend/main_app.html" class="btn">📋 メインアプリ</a>
+      <a href="/src/frontend/login.html" class="btn">🔐 ログイン</a>
+    </div>
+
+    <script>
+      // 自動的にメインアプリにリダイレクト（3秒後）
+      setTimeout(() => {
+        window.location.href = "/src/frontend/main_app.html";
+      }, 3000);
+    </script>
+  </body>
+</html>

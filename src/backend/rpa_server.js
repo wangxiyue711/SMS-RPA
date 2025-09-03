@@ -5,7 +5,7 @@ const path = require("path");
 const fs = require("fs");
 
 const app = express();
-const PORT = 3001;
+const PORT = 8888;
 
 // 中间件
 app.use(cors());
@@ -347,10 +347,15 @@ app.post("/api/sms/send", async (req, res) => {
 
     console.log(`Using SMS script: ${path.basename(smsScriptPath)}`);
 
-    // 启动Python进程发送SMS
+    // 启动Python进程发送SMS - 使用项目根目录作为工作目录
     const pythonProcess = spawn("python", [smsScriptPath], {
-      cwd: path.join(__dirname, "..", "rpa"),
+      cwd: path.join(__dirname, "..", ".."), // 设置为项目根目录
       stdio: ["pipe", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: "utf-8",
+        LANG: "en_US.UTF-8",
+      },
     });
 
     pythonProcess.stdin.write(inputData + "\n");
@@ -359,21 +364,38 @@ app.post("/api/sms/send", async (req, res) => {
     let output = "";
     let errorOutput = "";
 
-    // 收集输出
+    // 收集输出 - 添加编码错误处理
     pythonProcess.stdout.on("data", (data) => {
-      output += data.toString();
+      try {
+        output += data.toString("utf8");
+      } catch (e) {
+        // 如果UTF-8解码失败，尝试其他方式
+        output += data.toString();
+      }
     });
 
     pythonProcess.stderr.on("data", (data) => {
-      errorOutput += data.toString();
+      try {
+        errorOutput += data.toString("utf8");
+      } catch (e) {
+        // 如果UTF-8解码失败，尝试其他方式
+        errorOutput += data.toString();
+      }
     });
 
     // 等待进程结束
     pythonProcess.on("close", (code) => {
       console.log(`📱 SMS process exited with code: ${code}`);
       console.log("Output:", output);
+      console.log("Error output:", errorOutput);
 
-      if (code === 0) {
+      // 检查是否有明确的成功标识
+      const hasSuccessMarker =
+        output.includes("SCRIPT_EXIT_SUCCESS") || output.includes("SUCCESS:");
+      const hasErrorMarker =
+        output.includes("SCRIPT_EXIT_FAILURE") || output.includes("ERROR:");
+
+      if (code === 0 || hasSuccessMarker) {
         // 成功
         res.json({
           success: true,
@@ -381,12 +403,23 @@ app.post("/api/sms/send", async (req, res) => {
           output: output.trim(),
         });
       } else {
-        // 失败
+        // 失败 - 改进错误信息处理
         console.error("SMS Error:", errorOutput);
+        let errorDetails = errorOutput.trim() || output.trim();
+
+        // 如果错误信息包含乱码，提供更友好的错误信息
+        if (
+          errorDetails.includes("�") ||
+          errorDetails.includes("[MESSAGE_ENCODING_HANDLED]")
+        ) {
+          errorDetails =
+            "SMS sending failed due to encoding issues. Check server logs for details.";
+        }
+
         res.status(500).json({
           success: false,
           error: "SMS sending failed",
-          details: errorOutput.trim() || output.trim(),
+          details: errorDetails,
         });
       }
     });

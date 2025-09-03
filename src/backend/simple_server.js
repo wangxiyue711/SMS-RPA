@@ -34,7 +34,7 @@ app.post("/api/sms/send", async (req, res) => {
 
     console.log(`📱 为用户发送SMS: ${userUid}, 发送到: ${phone}`);
 
-    // Python脚本路径
+    // Python脚本路径 - 使用Firebase版本
     const smsScriptPath = path.join(
       __dirname,
       "..",
@@ -51,26 +51,32 @@ app.post("/api/sms/send", async (req, res) => {
       });
     }
 
-    // 启动Python进程
+    // 启动Python进程 - 设置UTF-8编码
     const pythonProcess = spawn("python", [smsScriptPath], {
       cwd: path.join(__dirname, "..", "rpa"),
       stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+      encoding: "utf8",
     });
 
-    // 发送输入数据
+    // 发送输入数据 - 确保JSON使用UTF-8编码
     const inputData = JSON.stringify({
       userUid: userUid,
       phone: phone,
       message: message,
     });
 
-    pythonProcess.stdin.write(inputData + "\n");
+    console.log(`📝 发送给Python的数据: ${inputData}`);
+    pythonProcess.stdin.write(inputData + "\n", "utf8");
     pythonProcess.stdin.end();
 
     let output = "";
     let errorOutput = "";
 
-    // 收集输出
+    // 收集输出 - 确保UTF-8解码
+    pythonProcess.stdout.setEncoding("utf8");
+    pythonProcess.stderr.setEncoding("utf8");
+
     pythonProcess.stdout.on("data", (data) => {
       output += data.toString();
     });

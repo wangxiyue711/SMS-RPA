@@ -11,6 +11,13 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
+# Firebase敏感文件
+firebase-service-account.json
+config/firebase/firebase-service-account.json
+
+# Vercel
+.vercel
+
 # 日志文件
 logs
 *.log

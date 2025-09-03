@@ -2,10 +2,12 @@
   "name": "sms-publisher-rpa-server",
   "version": "1.0.0",
   "description": "RPA Server for SMS Publisher - Firebase Edition",
-  "main": "src/backend/simple_server.js",
+  "main": "src/backend/rpa_server.js",
   "scripts": {
-    "start": "node src/backend/simple_server.js",
-    "dev": "nodemon src/backend/simple_server.js",
+    "start": "node src/backend/rpa_server.js",
+    "dev": "nodemon src/backend/rpa_server.js",
+    "build": "echo 'Build completed'",
+    "vercel-build": "npm install",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

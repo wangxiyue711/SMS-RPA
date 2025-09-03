@@ -75,9 +75,11 @@
                 },
                 sms_config: {
                   provider: "",
-                  api_key: "",
-                  api_secret: "",
-                  endpoint: "",
+                  api_url: "",
+                  api_id: "",
+                  api_password: "",
+                  sms_text_a: "",
+                  sms_text_b: "",
                 },
                 created_at: new Date(),
                 updated_at: new Date(),
@@ -140,9 +142,11 @@
                 },
                 sms_config: {
                   provider: "",
-                  api_key: "",
-                  api_secret: "",
-                  endpoint: "",
+                  api_url: "",
+                  api_id: "",
+                  api_password: "",
+                  sms_text_a: "",
+                  sms_text_b: "",
                 },
                 created_at: new Date(),
                 updated_at: new Date(),
@@ -208,6 +212,7 @@
               api_password: apiPassword,
               sms_text_a: smsTextA,
               sms_text_b: smsTextB,
+              use_delivery_report: false, // 添加送达报告设置
               provider: this.detectProvider(apiUrl), // 在对象方法内使用this
             };
 
@@ -376,8 +381,8 @@
           <ul class="nav-menu">
             <li><a href="#" class="active" id="navMail">アカウント設定</a></li>
             <li><a href="#" id="navApi">SMS設定</a></li>
-            <li><a href="#" id="navSms">SMS送信</a></li>
             <li><a href="#" id="navRpa">RPA実行</a></li>
+            <li><a href="#" id="navSms">個別送信テスト用</a></li>
           </ul>
         </nav>
 
@@ -570,7 +575,7 @@
                 font-size: 12px;
               "
             >
-              <span id="statusText">🔍 检查服务器连接状态...</span>
+              <span id="statusText">🔍 サーバー接続状態をチェック中...</span>
             </div>
 
             <form class="ai-form" onsubmit="sendIndividualSms(event)">
@@ -677,14 +682,23 @@
               <div
                 id="smsHistory"
                 style="
-                  max-height: 300px;
+                  max-height: 400px;
                   overflow-y: auto;
                   border: 1px solid #e8eae0;
-                  border-radius: 8px;
-                  padding: 12px;
+                  border-radius: 12px;
+                  padding: 16px;
+                  background: #fafafa;
+                  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
                 "
               >
-                <p style="color: #666; text-align: center">
+                <p
+                  style="
+                    color: #666;
+                    text-align: center;
+                    margin: 20px 0;
+                    font-style: italic;
+                  "
+                >
                   送信履歴はここに表示されます
                 </p>
               </div>
@@ -693,6 +707,7 @@
                 onclick="clearSmsHistory()"
                 style="
                   margin-top: 8px;
+                  margin-right: 8px;
                   padding: 4px 8px;
                   background: #dc3545;
                   color: white;
@@ -805,8 +820,8 @@
         const navs = [
           { btn: "navMail", panel: "panelMail" },
           { btn: "navApi", panel: "panelApi" },
-          { btn: "navSms", panel: "panelSms" },
           { btn: "navRpa", panel: "panelRpa" },
+          { btn: "navSms", panel: "panelSms" },
         ];
 
         function hideAll() {
@@ -1545,11 +1560,16 @@
             resultDiv.innerHTML =
               '<span style="color: #388e3c;">✅ SMS送信成功！</span>';
 
-            // 送信履歴に追加 - 包含状态码信息
+            // 送信履歴に追加 - ステータスコード情報を含む
             const statusInfo = result.output
               ? result.output.match(/STATUS: (\d+)/)?.[1] || "200"
               : "200";
-            addToSmsHistory(phone, message, "success", `Status: ${statusInfo}`);
+            addToSmsHistory(
+              phone,
+              message,
+              "success",
+              `ステータス: ${statusInfo}`
+            );
 
             // フォームをクリア
             document.getElementById("recipientPhone").value = "";
@@ -1562,7 +1582,7 @@
               result.error +
               "</span>";
 
-            // 提取状态码信息
+            // ステータスコード情報を抽出
             const statusInfo = result.details
               ? result.details.match(/STATUS: (\d+)/)?.[1] || "Unknown"
               : "Unknown";
@@ -1570,7 +1590,7 @@
               phone,
               message,
               "failed",
-              `Status: ${statusInfo} - ${result.error}`
+              `ステータス: ${statusInfo} - ${result.error}`
             );
           }
         } catch (error) {
@@ -1583,7 +1603,7 @@
             phone,
             message,
             "error",
-            `Connection Error: ${error.message}`
+            `接続エラー: ${error.message}`
           );
         }
       }
@@ -1598,7 +1618,7 @@
           message:
             message.substring(0, 50) + (message.length > 50 ? "..." : ""),
           status: status,
-          statusInfo: statusInfo, // 新增状态码信息
+          statusInfo: statusInfo, // ステータスコード情報を追加
         };
 
         smsHistory.unshift(historyItem); // 最新を上に
@@ -1617,12 +1637,12 @@
 
         if (smsHistory.length === 0) {
           historyDiv.innerHTML =
-            '<p style="color: #666; text-align: center;">送信履歴はここに表示されます</p>';
+            '<p style="color: #666; text-align: center; margin: 20px 0; font-style: italic;">送信履歴はここに表示されます</p>';
           return;
         }
 
         const historyHtml = smsHistory
-          .map((item) => {
+          .map((item, index) => {
             const statusIcon =
               {
                 success: "✅",
@@ -1637,31 +1657,68 @@
                 error: "#ff9800",
               }[item.status] || "#666";
 
+            const statusBgColor =
+              {
+                success: "#e8f5e8",
+                failed: "#ffeaea",
+                error: "#fff3e0",
+              }[item.status] || "#f5f5f5";
+
             return `
-            <div style="border-bottom: 1px solid #eee; padding: 8px 0; margin-bottom: 8px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <span style="font-weight: bold;">${item.phone}</span>
-                <span style="color: ${statusColor};">${statusIcon} ${
-              item.status
-            }</span>
+            <div style="
+              border: 1px solid #e0e0e0; 
+              border-radius: 8px; 
+              padding: 12px; 
+              margin-bottom: 12px;
+              background: linear-gradient(135deg, #ffffff 0%, ${statusBgColor} 100%);
+              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+              transition: box-shadow 0.2s ease;
+            " onmouseover="this.style.boxShadow='0 4px 8px rgba(0,0,0,0.15)'" onmouseout="this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)'">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                <div style="flex: 1;">
+                  <div style="font-weight: bold; font-size: 1.1em; color: #333; margin-bottom: 4px;">
+                    📱 ${item.phone}
+                  </div>
+                  <div style="color: #666; font-size: 0.95em; line-height: 1.4; margin-bottom: 6px;">
+                    ${item.message}
+                  </div>
+                </div>
+                <div style="
+                  display: flex; 
+                  align-items: center; 
+                  background: white;
+                  padding: 4px 8px;
+                  border-radius: 12px;
+                  border: 1px solid ${statusColor};
+                  color: ${statusColor};
+                  font-weight: bold;
+                  font-size: 0.85em;
+                ">
+                  ${statusIcon} ${item.status.toUpperCase()}
+                </div>
               </div>
-              <div style="color: #666; font-size: 0.9em; margin-bottom: 4px;">
-                ${item.message}
-              </div>
-              <div style="color: #999; font-size: 0.8em;">
-                ${item.timestamp}
+              <div style="
+                display: flex; 
+                justify-content: space-between; 
+                align-items: center;
+                padding-top: 8px;
+                border-top: 1px solid #f0f0f0;
+                font-size: 0.8em;
+                color: #888;
+              ">
+                <span>🕒 ${item.timestamp}</span>
                 ${
                   item.statusInfo
-                    ? '<br><span style="color: ' +
+                    ? '<span style="color: ' +
                       (item.status === "success" ? "#388e3c" : "#d32f2f") +
-                      ';">' +
+                      '; font-weight: 500;">' +
                       item.statusInfo +
                       "</span>"
                     : ""
                 }
                 ${
                   item.error && !item.statusInfo
-                    ? '<br><span style="color: #d32f2f;">エラー: ' +
+                    ? '<span style="color: #d32f2f; font-weight: 500;">エラー: ' +
                       item.error +
                       "</span>"
                     : ""
@@ -1683,28 +1740,76 @@
         }
       }
 
+      // 履歴項目を編集する関数
+      function editHistoryItem(index) {
+        const item = smsHistory[index];
+        if (!item) return;
+
+        const newPhone = prompt("電話番号を編集:", item.phone);
+        if (newPhone === null) return; // キャンセルされた場合
+
+        const newMessage = prompt("メッセージを編集:", item.message);
+        if (newMessage === null) return; // キャンセルされた場合
+
+        const newStatus = prompt(
+          "ステータスを編集 (success/failed/error):",
+          item.status
+        );
+        if (newStatus === null) return; // キャンセルされた場合
+
+        // 更新
+        smsHistory[index] = {
+          ...item,
+          phone: newPhone,
+          message: newMessage,
+          status: newStatus,
+          timestamp: item.timestamp + " (編集済み)",
+        };
+
+        localStorage.setItem("smsHistory", JSON.stringify(smsHistory));
+        updateSmsHistoryDisplay();
+      }
+
+      // 履歴項目を削除する関数
+      function deleteHistoryItem(index) {
+        const item = smsHistory[index];
+        if (!item) return;
+
+        if (
+          confirm(
+            `この履歴項目を削除しますか？\n電話番号: ${
+              item.phone
+            }\nメッセージ: ${item.message.substring(0, 50)}...`
+          )
+        ) {
+          smsHistory.splice(index, 1);
+          localStorage.setItem("smsHistory", JSON.stringify(smsHistory));
+          updateSmsHistoryDisplay();
+        }
+      }
+
       // ページ読み込み時に履歴を表示
       document.addEventListener("DOMContentLoaded", function () {
         setTimeout(() => {
           updateSmsHistoryDisplay();
-          checkServerConnection(); // 检查服务器连接状态
+          checkServerConnection(); // サーバー接続状態をチェック
         }, 1000);
 
-        // 定期检查连接状态（每30秒）
+        // 定期的に接続状態をチェック（30秒ごと）
         setInterval(checkServerConnection, 30000);
       });
 
-      // 调试函数：检查当前用户状态
+      // デバッグ関数：現在のユーザー状態をチェック
       window.checkUserStatus = function () {
-        console.log("=== 用户状态检查 ===");
+        console.log("=== ユーザー状態チェック ===");
         console.log("🔍 window.currentUser:", window.currentUser);
         console.log("🔍 auth.currentUser:", auth.currentUser);
         console.log(
-          "🔍 UserEmail显示:",
+          "🔍 UserEmail表示:",
           document.getElementById("userEmail")?.textContent
         );
         if (window.currentUser) {
-          console.log("👤 当前用户详情:", {
+          console.log("👤 現在のユーザー詳細:", {
             email: window.currentUser.email,
             uid: window.currentUser.uid,
             emailVerified: window.currentUser.emailVerified,
